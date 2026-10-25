@@ -11,6 +11,32 @@ WakeLock 防休眠、凭据 Keystore 加密等能力。
 
 ---
 
+## 0. 快速开始：云构建（免安装 Android Studio，推荐）
+
+本仓库已内置 GitHub Actions 云构建配置（`.github/workflows/build.yml`），
+**不需要安装 Android Studio / JDK / Android SDK**，代码推到 GitHub 即自动编译出 APK：
+
+1. GitHub 注册账号，创建一个**私有仓库**（建议私有，代码不出境）；
+2. 在工程根目录执行（`<你的用户名>` 换成实际用户名）：
+   ```bash
+   git remote add origin https://github.com/<你的用户名>/tv-monitor.git
+   git push -u origin main
+   ```
+3. 推送后自动触发：仓库页 → `Actions` 标签 → `云构建 Debug APK` 运行记录
+   （首次约 5–10 分钟，含 Gradle 8.10.2 与依赖下载）；
+4. 构建变绿 ✓ 后：进入该次运行记录 → 页面底部 `Artifacts` → 下载
+   `tv-monitor-apk`（zip，解压即得 `app-debug.apk`）；
+5. 也可在网页手动触发：`Actions → 云构建 Debug APK → Run workflow`。
+
+> 云构建同时运行 84 项单元测试作门禁（`:app:testDebugUnitTest`），失败则不产出 APK。
+> 免费额度：公开仓库不限时长；私有仓库每月 2000 分钟，单次约 10 分钟，个人够用。
+
+本地编译（可选，同样不装 Android Studio）：JDK 17/21 + Android SDK 命令行工具
+（约 150MB，远小于 Android Studio 1GB+），然后
+`gradle wrapper --gradle-version 8.10.2 && ./gradlew :app:assembleDebug`。
+
+---
+
 ## 1. 环境要求
 
 | 组件 | 版本 |
