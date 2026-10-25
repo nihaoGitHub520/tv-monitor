@@ -274,3 +274,47 @@ GitHub Actions 首次真实构建（`:app:testDebugUnitTest`）：**84 项中 14
 ### 验证方式
 
 云端 CI（单测门禁 + 编译 + 自动 Release b8）+ 待雷电模拟器实测（进入/退出单预览冻结复测、点击编辑、chrome 3s/5s 隐藏、开机启动开关）。
+
+---
+
+## 11. 增量变更（2026-10-25 · 三轮反馈：单预览返回冻结根因级修复——双播放器架构）
+
+来源：用户三轮反馈（b8"surface 直切 + stall 看门狗"在雷电模拟器仍 100% 冻结，两次进出均复现）。
+
+### 11.1 根因（现场取证 + media3 源码逐行核对）
+
+现象：主界面按 `1` 进入单预览播放正常，Esc 返回四分格后该格画面永久冻结在最后一帧（2 分钟观察 + 两次进出均复现；再次进入单预览解码器是活的，证明解码器没死，是 surface 热切换后渲染循环没恢复）。
+
+日志证据（logcat，tag TvMonitor）：
+
+- 退出单预览后该 slot 无任何后续日志：无强制恢复、无重连、无错误；
+- framework 同期日志：`MediaCodec: [OMX.google.h264.decoder] setting surface generation` + `SurfaceUtils: connecting to surface ... / disconnecting from surface ...`——`MediaCodec.setOutputSurface()` 调用成功，解码器确实切到四分格 surface 并渲染了最后一帧，但之后不再产出新帧；
+- 播放器始终 STATE_READY、playWhenReady=true → b8 的 surface stall 看门狗（检测到 READY 即退出）不触发；重连逻辑（只认 PlaybackException）不触发 → 永久冻结。
+
+根因结论：**对运行中的软件解码器执行 setOutputSurface 后，该解码器停止出帧**——media3 官方 issue #1433 已知模式（"video remains stuck on the initial frame, although the audio continues to play correctly"）。雷电模拟器（x86 无硬件解码器，用 OMX.google.h264.decoder）必现；部分真机盒子也需 `codecNeedsSetOutputSurfaceWorkaround` 兜底。
+
+历史方案复盘：b7"先摘后挂"（清 surface → 解码器释放重建）冻结；b8"先挂后摘"（无缝 setOutputSurface）也冻结。**结论：本环境对运行中的 player 做 surface 热切换不可靠，必须消除热切换本身。**
+
+### 11.2 修复方案：双播放器架构（previewSlot）
+
+media3 维护者在 #1433 的官方建议原话："You can use two different surfaces/views and just mask one depending on which player needs to play"。
+
+核心思想：四分格 player 全程不摘卸、不停播；单预览 overlay 使用独立的第 5 个 PlaybackSlot（previewSlot），有自己的 player、surface、状态机。进入预览 = 起预览 player；退出 = 释放预览 player；四分格 player 从未被触碰 → 返回即时是活的。彻底不存在 surface 热切换。
+
+| # | 文件 | 改动要点 |
+|---|---|---|
+| 1 | `playback/QuadPlaybackManager.kt` | 新增第 5 个 PlaybackSlot（previewSlot，下标 4 仅日志用），复用 PlaybackSlot 全部机制（状态机/重连/首帧 watchdog/统计/静音）；`enterSinglePreview` = previewSlot.bind(source) + attachView(overlay) + setMuted（四分格 slots 全程不碰）；`exitSinglePreview` = detachView(overlay) → bind(null) 释放（顺序不能反）；`switchSinglePreview` = previewSlot 换源（同视图 setMediaItem+prepare，旧 codec 整体释放/新 codec 新连 surface，属正常路径）；`toggleMute` 同步预览 player；新增 `pausePreview/resumePreview`；`release()` 追加 previewSlot.release() |
+| 2 | `ui/MainActivity.kt` | 新增 `observePreviewState()` 协程 collect `previewState`（预览 overlay 的加载/错误/重连倒计时直接反映预览 player 真实状态，取代原四分格状态代理）；`exitSinglePreview` 删除 `slots[it].resume()` 补丁；`refreshPreviewOverlay`/`showInfoOverlay` 数据源改 `previewState`；`togglePlayPause` 改调 `pausePreview/resumePreview` |
+| 3 | `playback/PlaybackSlot.kt` | `prepareMedia` 增加绑定时效校验（2 行，非重构）：双播放器架构下 bind 是异步起流（解析可能走网络），解析在途时若已退出预览 / 连续切路，丢弃在途结果——否则会起预览态之外的孤儿流（后台出声/占带宽）或起错源。既有 attach/detach/bind/release 与 stall 看门狗均未改动 |
+
+范围说明：第 3 项是双播放器 bind 生命周期的必要竞态防护（不加上线，"进入预览后立刻 Esc"与"快速连续切路"会引入比原 bug 更隐蔽的新缺陷），故超出主理人给定文件清单，特此申报。
+
+### 11.3 取舍（如实声明）
+
+- **收益**：返回四分格即时是活的（四分格 player 从未被触碰）；彻底消除 surface 热切换类冻结（含未来其它 surface 切换路径）。
+- **代价**：预览期间该路带宽/解码开销 x2（四分格仍在后台播同一路）；预览起播比热切换多一次起流耗时（RTSP 约 1-2s，观感为"进入预览后稍候出画"，可接受）。
+- 模拟器上 5 路软件解码 CPU 压力高于 4 路，低端真机需关注（当前用户环境为雷电模拟器，无真机数据）。
+
+### 11.4 验证方式
+
+云端 CI（84 项单测门禁 + assembleDebug + 自动 Release b9）+ 雷电模拟器实测：等四分格起流 → 按 `1` 进单预览 → 等 3s → Esc 返回 → 间隔 4s 连截两张图对比左上格画面是否流动 → logcat 复查。回归：进/出/切路（左右方向键）、预览内静音（静音键）、播放暂停（空格/确认）、返回后静音图标状态、源管理页点击编辑入口。

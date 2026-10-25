@@ -260,6 +260,11 @@ class PlaybackSlot(
             when (val result = resolver.resolve(src)) {
                 is AppResult.Failure -> handleResolveFailure(result.error)
                 is AppResult.Success -> withContext(Dispatchers.Main) {
+                    // 绑定竞态防护（2026-10-25 双播放器架构）：解析在途时若已退出
+                    // 单预览 / 连续切路（bind 换了源或置空），丢弃本次解析结果——
+                    // 否则会起一个预览态之外的孤儿流（后台出声/占带宽），
+                    // 或起错源（连续切路后画面停在中间路）
+                    if (source !== src) return@withContext
                     startPlayback(result.data)
                 }
             }

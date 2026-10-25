@@ -40,8 +40,8 @@ import kotlinx.coroutines.launch
  * 主界面（单 Activity）：四分格播放 + 单预览 Overlay + Fragment 宿主 + 全局按键分发。
  *
  * 关键机制落地：
- * 1. **单预览 attach/detach**（FR-P0-02）：进入/返回只切换 PlayerView 挂载目标，
- *    player 不 stop、不重新 prepare，四路播放不中断；
+ * 1. **单预览双播放器**（FR-P0-02，2026-10-25 冻结修复）：单预览由独立的第 5 个
+ *    player（previewSlot）起流，四分格 player 全程不中断；彻底消除 surface 热切换；
  * 2. **WakeLock 防休眠**（主理人裁决 5）：PARTIAL_WAKE_LOCK + FLAG_KEEP_SCREEN_ON
  *    + WifiLock（高版本 HIGH_PERF 模式，注意 API 兼容与 DEPRECATION）；
  * 3. **D-pad 全局语义**：四分格焦点矩阵声明式（view_quad_grid.xml nextFocus，越界不 wrap）；
@@ -130,6 +130,7 @@ class MainActivity : AppCompatActivity() {
             refreshQuadMuteIcons()
         }
         observeSlotStates()
+        observePreviewState()
         TvLog.i(TAG, "MainActivity 创建完成")
     }
 
@@ -148,17 +149,18 @@ class MainActivity : AppCompatActivity() {
 
     // ===================== 状态订阅 =====================
 
-    /** 合并四路状态流：刷新四分格与单预览 Overlay；首次有源时聚焦。 */
+    /**
+     * 合并四路状态流：刷新四分格渲染；首次有源时聚焦。
+     *
+     * 单预览 Overlay 的状态改由 [observePreviewState] 订阅 previewState
+     * （2026-10-25 双播放器架构：预览 player 与四分格 player 已是两个实例，
+     * 再用四分格状态做代理会在预览重连时显示四分格的 ONLINE，误导用户）。
+     */
     private fun observeSlotStates() {
         activityScope.launch {
             combine(playbackManager.slotStates) { states -> states.toList() }
                 .collect { states ->
                     binding.quadGrid.render(states)
-                    if (playbackManager.isSinglePreview()) {
-                        playbackManager.previewIndex()?.let { index ->
-                            overlay.renderState(states[index])
-                        }
-                    }
                     if (!initialFocusRequested) {
                         val index = binding.quadGrid.firstConfiguredIndex(states)
                         if (index != null) {
@@ -167,6 +169,21 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+        }
+    }
+
+    /**
+     * 订阅预览 player 状态流（2026-10-25 双播放器架构）：
+     * 单预览 overlay 的标题/加载/错误/重连倒计时直接反映 previewSlot 的真实状态，
+     * 比原来用四分格状态做代理更准。
+     */
+    private fun observePreviewState() {
+        activityScope.launch {
+            playbackManager.previewState.collect { state ->
+                if (playbackManager.isSinglePreview()) {
+                    overlay.renderState(state)
+                }
+            }
         }
     }
 
@@ -375,12 +392,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun exitSinglePreview() {
-        val index = playbackManager.previewIndex()
         playbackManager.exitSinglePreview()
         overlay.hide()
-        // 返回四分格 = 恢复实时监看：单预览内的用户暂停不带回四分格
-        // （2026-10-25 用户反馈：放大再返回后画面暂停）
-        index?.let { playbackManager.slots[it].resume() }
+        // 双播放器架构（2026-10-25）：四分格 player 全程未暂停/未摘卸，返回即时是活的；
+        // 旧的 slots[it].resume() 补丁已删除（不再需要）
         refreshQuadMuteIcons()
         TvLog.i(TAG, "返回四分格")
     }
@@ -388,15 +403,16 @@ class MainActivity : AppCompatActivity() {
     /** 切换/进入后刷新 Overlay 标题与错误态（切路时复现左上角 chrome 3s）。 */
     private fun refreshPreviewOverlay() {
         val index = playbackManager.previewIndex() ?: return
-        overlay.renderState(playbackManager.slotStates[index].value)
+        overlay.renderState(playbackManager.previewState.value)
         overlay.setMuted(playbackManager.isMuted(index))
         overlay.showChrome()
     }
 
     /** info 键：显示播放统计 overlay，3s 自动隐藏（US-10）。 */
     private fun showInfoOverlay() {
-        val index = playbackManager.previewIndex() ?: return
-        overlay.toggleInfo(playbackManager.slotStates[index].value.stats)
+        // stats 取自预览 player（双播放器架构，2026-10-25）
+        if (!playbackManager.isSinglePreview()) return
+        overlay.toggleInfo(playbackManager.previewState.value.stats)
     }
 
     /** 静音键：仅切换当前路（US-09）。 */
@@ -439,12 +455,13 @@ class MainActivity : AppCompatActivity() {
 
     /** 确认键：播放/暂停当前路（暂停态在标题追加“已暂停”，chrome 复现 3s）。 */
     private fun togglePlayPause() {
-        val index = playbackManager.previewIndex() ?: return
+        // 双播放器架构（2026-10-25）：播放/暂停只作用于预览 player
+        if (!playbackManager.isSinglePreview()) return
         if (overlay.isPaused) {
-            playbackManager.slots[index].resume()
+            playbackManager.resumePreview()
             overlay.setPaused(false)
         } else {
-            playbackManager.slots[index].pause()
+            playbackManager.pausePreview()
             overlay.setPaused(true)
         }
         overlay.showChrome()
@@ -515,7 +532,8 @@ class MainActivity : AppCompatActivity() {
  * 单预览 Overlay（内嵌于 MainActivity.kt 的视图控制器）。
  *
  * 管理：左上角 chrome（标题 + 静音 + 信息 overlay）、底部操作提示、播放/暂停态。
- * 播放器挂载由 [QuadPlaybackManager.enterSinglePreview] 完成（attach 不重起流）。
+ * 播放器由 [QuadPlaybackManager.enterSinglePreview] 起独立预览 player 并挂载
+ * （双播放器架构，2026-10-25：预览 player 与四分格 player 是两个实例）。
  *
  * 自动隐藏（2026-10-25 用户需求）：
  * - 左上角流信息（标题）与静音图标：进入预览 3s 后自动消失；Info 键唤出统计时复现 3s；

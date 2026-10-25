@@ -140,8 +140,9 @@ class DefaultPlayerFactory(private val context: Context) : PlayerFactory {
  * 职责：
  * 1. 创建并持有 4 个 [PlaybackSlot]（每路独立 scope，单路故障隔离）；
  * 2. 从 [SourceStore] 恢复格位绑定并驱动播放；
- * 3. 单预览 attach/detach 切换：player **不 stop、不重新 prepare**，
- *    返回四分格后四路播放不中断（FR-P0-02 / T3 验收 3）；
+ * 3. 单预览双播放器架构（2026-10-25 冻结根因级修复）：单预览使用独立的第 5 个
+ *    [PlaybackSlot]（previewSlot）起流，四分格 player 全程不摘卸、不停播，
+ *    返回即时是活的；彻底消除 surface 热切换（FR-P0-02 / T3 验收 3）；
  * 4. 静音矩阵（US-09：默认全静音，仅当前路可取消静音，切格不串台）；
  * 5. 监听源库变更（外部删除/换绑）并同步到槽位。
  *
@@ -178,6 +179,38 @@ class QuadPlaybackManager(
     /** 槽位 UI 状态流列表（四分格 / 单预览 collect 用）。 */
     val slotStates: List<StateFlow<SlotUiState>> = slots.map { it.uiState }
 
+    /**
+     * 单预览专用槽位（第 5 个 PlaybackSlot，2026-10-25 双播放器架构）。
+     *
+     * 背景：对运行中的解码器执行 `MediaCodec.setOutputSurface()` 后，软件解码器
+     * （雷电模拟器 OMX.google.h264.decoder，media3 issue #1433 已知模式）停止出帧，
+     * surface 热切换在本环境不可靠（b7 先摘后挂 / b8 先挂后摘均冻结）。
+     * 故按 media3 维护者建议（"use two different surfaces/views and just mask one
+     * depending on which player needs to play"）落地双播放器：单预览起独立 player、
+     * 独立 surface；四分格 player 全程未被触碰，返回即时是活的。
+     *
+     * 下标 [PREVIEW_SLOT_INDEX] 仅用于日志区分，不对应任何四分格格位；
+     * 未进入预览时无 player 实例（bind 才创建），不占解码/带宽资源。
+     */
+    private val previewSlot = PlaybackSlot(
+        slotIndex = PREVIEW_SLOT_INDEX,
+        resolver = resolver,
+        configProvider = { settingsStore.snapshot().reconnect },
+        playerFactory = playerFactory,
+        optionsProvider = {
+            val settings = settingsStore.snapshot()
+            PlayerOptions(
+                bufferLimitMb = settings.bufferLimitMb,
+                maxResolutionHeight = settings.maxResolutionHeight,
+            )
+        },
+        // 独立 scope：预览 player 的任务与四路互不干扰
+        scope = CoroutineScope(managerScope.coroutineContext + SupervisorJob()),
+    )
+
+    /** 单预览 UI 状态流（overlay 直接反映预览 player 的真实加载/错误/重连状态）。 */
+    val previewState: StateFlow<SlotUiState> get() = previewSlot.uiState
+
     /** 四分格各 PlayerView（attach 后由 manager 托管切换）。 */
     private val quadViews = arrayOfNulls<PlayerView>(QuadLayoutState.SLOT_COUNT)
 
@@ -211,6 +244,7 @@ class QuadPlaybackManager(
     /** 全部释放（Activity onDestroy）。 */
     fun release() {
         slots.forEach { it.release() }
+        previewSlot.release()
         quadViews.fill(null)
         overlayView = null
         singlePreviewIndex = null
@@ -253,14 +287,16 @@ class QuadPlaybackManager(
     // ===================== 单预览 =====================
 
     /**
-     * 进入单预览：把该槽 player attach 到 overlay 的 PlayerView。
+     * 进入单预览：为预览 overlay 启动独立的预览 player（双播放器架构）。
      *
-     * 关键约束（T3 验收 3 + 2026-10-25 surface 冻结修复）：
-     * - 全程不 stop / 不 prepare，仅切换视频输出目标；
-     * - 顺序“先挂 overlay 再摘格位”（见 [PlaybackSlot.attachView]）：
-     *   surface 直切不经过“无 surface”中间态，摘格位时身份守卫命中为空操作，
-     *   **不释放解码器**——与 media3 官方 switchTargetView 模式一致；
-     * - 返回后由 [exitSinglePreview] 重新挂回四分格视图。
+     * 设计取舍（2026-10-25 根因级修复，替代 surface 热切换方案）：
+     * 旧实现把四分格 player attach 到 overlay 再摘回，依赖 surface 热切换；
+     * 但雷电模拟器软件解码器对运行中的 codec 执行 setOutputSurface 后停止出帧
+     * （media3 issue #1433 已知模式，b7/b8 两种顺序均实测冻结）。
+     * 现按 media3 维护者建议落地双播放器：预览 = 独立第 5 个 player 起流；
+     * 四分格 slots[slotIndex] 的 attach/detach 全程不碰 → 返回即时是活的。
+     *
+     * 代价：预览期间该路带宽/解码开销 x2（四分格仍在后台播同一路）。
      *
      * @return true=进入成功；已在单预览态或槽位无源时返回 false。
      */
@@ -268,59 +304,62 @@ class QuadPlaybackManager(
         checkSlotIndex(slotIndex)
         if (singlePreviewIndex != null) return false
         val state = slots[slotIndex].uiState.value
-        if (state.source == null) {
+        val source = state.source
+        if (source == null) {
             TvLog.w(TAG, "slot=$slotIndex 未配置源，无法进入单预览")
             return false
         }
-        // 挂到 overlay（attachView 内部：先 overlay 拿 surface 直切，再摘格位——no-op）
-        slots[slotIndex].attachView(overlay)
+        // 预览 player 独立起流（bind → 解析 → 建 player → prepare → 挂 overlay）；
+        // 四分格 player 保持播放，不参与任何 surface 切换
+        previewSlot.bind(source)
+        previewSlot.attachView(overlay)
+        previewSlot.setMuted(mutedStates[slotIndex])
         overlayView = overlay
         singlePreviewIndex = slotIndex
-        slots[slotIndex].setMuted(mutedStates[slotIndex])
-        TvLog.i(TAG, "进入单预览：slot=$slotIndex（${state.source.name}）")
+        TvLog.i(TAG, "进入单预览：slot=$slotIndex（${source.name}），预览 player 独立起流")
         return true
     }
 
     /**
-     * 退出单预览：恢复四分格视图挂载（四路不中断）。
+     * 退出单预览：释放预览 player，恢复四分格展示。
      *
-     * surface 顺序（2026-10-25 修复“返回后画面暂停/冻结”的整体 bug）：
-     * **先挂格位再摘 overlay**——格位 surface 一直存在，player 的 video surface
-     * 从 overlay 直切格位，不经过“无 surface”中间态；摘 overlay 时身份守卫命中
-     * （当前 holder 已是格位的）为空操作，不释放解码器。
-     * 旧实现先摘 overlay 再挂格位，触发“清 surface → 解码器释放 → 重建”，
-     * 在模拟器/低端盒上重建挂起 → 画面冻结。
+     * 双播放器架构下本方法只动 previewSlot：**先摘 overlay 视图再释放 player**
+     * （顺序不能反——先释放 player 会导致视图仍持有已 release 的 player，
+     * detachView 的身份比较摘不干净）；四分格 player 从未被暂停/摘卸，
+     * 返回后四路画面即时是活的，无需任何 resume 补丁。
      */
     fun exitSinglePreview() {
         val index = singlePreviewIndex ?: return
-        quadViews[index]?.let { slots[index].attachView(it) }
+        previewSlot.detachView()
+        previewSlot.bind(null)
         overlayView = null
         singlePreviewIndex = null
-        TvLog.i(TAG, "退出单预览，恢复四分格")
+        TvLog.i(TAG, "退出单预览，恢复四分格（slot=$index 全程未触碰）")
     }
 
     /**
      * 单预览内切换上一路/下一路（仅在有源槽位间轮转）。
      *
-     * surface 顺序（同 [exitSinglePreview]）：先把当前路挂回它自己的格位
-     * （surface 从 overlay 直切格位，不释放 codec），再把新路挂到 overlay——
-     * 此时 setPlayer 内部对旧 player 的 clear 因 holder 已变而是 no-op。
+     * 双播放器架构：overlay 始终挂在同一个预览 player 上，换源 =
+     * previewSlot.bind(nextSource)（setMediaItem + prepare；kind 不变时复用 player，
+     * kind 变更时 player 整体重建）——旧 codec 整体释放、新 codec 新连 surface
+     * 是 media3 正常路径，**不涉及运行中 codec 的 setOutputSurface 热切换**。
      *
-     * 静音语义（US-09）：切走后原槽恢复其自身静音状态，新槽应用其状态，不串台。
+     * 静音语义（US-09）：新路应用其自身静音状态，不串台。
      */
     fun switchSinglePreview(delta: Int, overlay: PlayerView): Boolean {
         val current = singlePreviewIndex ?: return false
         val next = nextConfiguredSlot(current, delta)
         if (next == null || next == current) return false
-        // 1) 当前路先挂回自己的格位（直切，不释放 codec）
-        val currentQuad = quadViews[current] ?: return false
-        slots[current].attachView(currentQuad)
-        slots[current].setMuted(mutedStates[current])
-        // 2) 新路再挂 overlay（对旧 player 的 clear 为 no-op）
-        slots[next].attachView(overlay)
-        slots[next].setMuted(mutedStates[next])
+        val nextSource = slots[next].uiState.value.source ?: return false
+        // 换源：overlay 保持挂在同一个预览 player 上；此处防御性重挂
+        // （同视图同 player 时为 PlayerView.setPlayer 早返回的空操作），
+        // 仅兜底调用方传入不同视图实例的场景
+        previewSlot.bind(nextSource)
+        previewSlot.attachView(overlay)
+        previewSlot.setMuted(mutedStates[next])
         singlePreviewIndex = next
-        TvLog.i(TAG, "单预览切路：$current -> $next")
+        TvLog.i(TAG, "单预览切路：$current -> $next（预览 player 换源）")
         return true
     }
 
@@ -334,12 +373,17 @@ class QuadPlaybackManager(
 
     /**
      * 切换指定槽静音状态（US-09：仅作用于该路）。
+     * 双播放器架构：预览态下同步预览 player 的音量，保证预览内静音、
+     * 返回四分格后静音态两边一致。
      * @return 切换后的静音状态（true=静音）。
      */
     fun toggleMute(slotIndex: Int): Boolean {
         checkSlotIndex(slotIndex)
         mutedStates[slotIndex] = !mutedStates[slotIndex]
         slots[slotIndex].setMuted(mutedStates[slotIndex])
+        if (singlePreviewIndex == slotIndex) {
+            previewSlot.setMuted(mutedStates[slotIndex])
+        }
         return mutedStates[slotIndex]
     }
 
@@ -356,6 +400,19 @@ class QuadPlaybackManager(
     /** 全部恢复。 */
     fun resumeAll() {
         slots.forEach { it.resume() }
+    }
+
+    /**
+     * 暂停单预览播放（不释放；转调 previewSlot.pause）。
+     * 双播放器架构：只影响预览 player，四分格播放不受影响。
+     */
+    fun pausePreview() {
+        previewSlot.pause()
+    }
+
+    /** 恢复单预览播放（转调 previewSlot.resume）。 */
+    fun resumePreview() {
+        previewSlot.resume()
     }
 
     // ===================== 内部 =====================
@@ -416,5 +473,11 @@ class QuadPlaybackManager(
 
     companion object {
         private const val TAG = "TvMonitor:QuadManager"
+
+        /**
+         * 单预览专用槽位下标（仅用于日志区分，不对应四分格格位 0..3）。
+         * 第 5 个 PlaybackSlot：双播放器架构，见 [previewSlot]。
+         */
+        private const val PREVIEW_SLOT_INDEX = 4
     }
 }
