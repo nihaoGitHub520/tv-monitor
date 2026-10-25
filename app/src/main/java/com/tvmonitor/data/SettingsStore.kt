@@ -43,6 +43,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_PREFER_SUBSTREAM, settings.preferSubStream)
             .putInt(KEY_BUFFER_MB, settings.bufferLimitMb)
             .putInt(KEY_MAX_RESOLUTION, settings.maxResolutionHeight)
+            .putBoolean(KEY_AUTO_START, settings.autoStart)
             .putBoolean(KEY_LOG_ENABLED, settings.logEnabled)
             .apply()
         applySnapshot(settings)
@@ -98,6 +99,7 @@ class SettingsStore(context: Context) {
                 KEY_MAX_RESOLUTION,
                 AppSettings.DEFAULT_MAX_RESOLUTION_HEIGHT,
             ).coerceAtLeast(0),
+            autoStart = prefs.getBoolean(KEY_AUTO_START, false),
             logEnabled = prefs.getBoolean(KEY_LOG_ENABLED, BuildConfig.DEBUG),
         )
     }
@@ -114,6 +116,7 @@ class SettingsStore(context: Context) {
         private const val KEY_PREFER_SUBSTREAM = "prefer_sub_stream"
         private const val KEY_BUFFER_MB = "buffer_limit_mb"
         private const val KEY_MAX_RESOLUTION = "max_resolution_height"
+        private const val KEY_AUTO_START = "auto_start"
         private const val KEY_LOG_ENABLED = "log_enabled"
     }
 }

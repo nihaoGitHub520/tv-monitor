@@ -99,10 +99,12 @@ class MainActivity : AppCompatActivity() {
         overlay = SinglePreviewOverlay(
             root = binding.singlePreviewRoot,
             playerView = binding.singlePreviewPlayer,
+            header = binding.singlePreviewHeader,
             titleView = binding.singlePreviewTitle,
             infoPanel = binding.infoPanel,
             infoView = binding.singlePreviewInfo,
             muteButton = binding.btnMute,
+            hintView = binding.singlePreviewHint,
         )
         overlay.onMuteToggle = { toggleMuteCurrentSlot() }
         overlay.onPlayPauseToggle = { togglePlayPause() }
@@ -383,11 +385,12 @@ class MainActivity : AppCompatActivity() {
         TvLog.i(TAG, "返回四分格")
     }
 
-    /** 切换/进入后刷新 Overlay 标题与错误态。 */
+    /** 切换/进入后刷新 Overlay 标题与错误态（切路时复现左上角 chrome 3s）。 */
     private fun refreshPreviewOverlay() {
         val index = playbackManager.previewIndex() ?: return
         overlay.renderState(playbackManager.slotStates[index].value)
         overlay.setMuted(playbackManager.isMuted(index))
+        overlay.showChrome()
     }
 
     /** info 键：显示播放统计 overlay，3s 自动隐藏（US-10）。 */
@@ -401,6 +404,8 @@ class MainActivity : AppCompatActivity() {
         val index = playbackManager.previewIndex() ?: return
         val muted = playbackManager.toggleMute(index)
         overlay.setMuted(muted)
+        // 静音图标随 chrome 复现 3s，让用户看到切换结果
+        overlay.showChrome()
         // 单预览内的静音切换同步回四分格图标（返回后状态可见）
         refreshQuadMuteIcons()
         Toast.makeText(
@@ -432,7 +437,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 确认键：播放/暂停当前路。 */
+    /** 确认键：播放/暂停当前路（暂停态在标题追加“已暂停”，chrome 复现 3s）。 */
     private fun togglePlayPause() {
         val index = playbackManager.previewIndex() ?: return
         if (overlay.isPaused) {
@@ -442,6 +447,7 @@ class MainActivity : AppCompatActivity() {
             playbackManager.slots[index].pause()
             overlay.setPaused(true)
         }
+        overlay.showChrome()
     }
 
     // ===================== Fragment 导航 =====================
@@ -508,22 +514,29 @@ class MainActivity : AppCompatActivity() {
 /**
  * 单预览 Overlay（内嵌于 MainActivity.kt 的视图控制器）。
  *
- * 管理：标题、信息 overlay（3s 自动隐藏）、静音按钮、播放/暂停态。
+ * 管理：左上角 chrome（标题 + 静音 + 信息 overlay）、底部操作提示、播放/暂停态。
  * 播放器挂载由 [QuadPlaybackManager.enterSinglePreview] 完成（attach 不重起流）。
+ *
+ * 自动隐藏（2026-10-25 用户需求）：
+ * - 左上角流信息（标题）与静音图标：进入预览 3s 后自动消失；Info 键唤出统计时复现 3s；
+ * - 底部操作方式：每次进入预览显示 5s 后自动消失。
  */
 class SinglePreviewOverlay(
     private val root: View,
     private val playerView: PlayerView,
+    private val header: View,
     private val titleView: TextView,
     private val infoPanel: View,
     private val infoView: TextView,
     private val muteButton: ImageButton,
+    private val hintView: TextView,
 ) {
     var onMuteToggle: (() -> Unit)? = null
     var onPlayPauseToggle: (() -> Unit)? = null
 
     private val handler = Handler(Looper.getMainLooper())
-    private var infoHideRunnable: Runnable? = null
+    private var chromeHideRunnable: Runnable? = null
+    private var hintHideRunnable: Runnable? = null
     private var paused: Boolean = false
 
     /** 基础标题（源名）。 */
@@ -543,12 +556,28 @@ class SinglePreviewOverlay(
     fun show() {
         root.isVisible = true
         paused = false
+        // 左上角 chrome 3s 消失；底部操作提示 5s 消失
+        showChrome()
+        hintView.isVisible = true
+        cancelHintHide()
+        hintHideRunnable = Runnable { hintView.isVisible = false }.also {
+            handler.postDelayed(it, HINT_AUTO_HIDE_MS)
+        }
     }
 
     fun hide() {
         root.isVisible = false
-        cancelInfoAutoHide()
+        cancelAutoHide()
         infoPanel.isVisible = false
+    }
+
+    /** 显示左上角 chrome（标题 + 静音 + 信息面板）并排 3s 自动隐藏。 */
+    fun showChrome() {
+        header.isVisible = true
+        cancelChromeHide()
+        chromeHideRunnable = Runnable { header.isVisible = false }.also {
+            handler.postDelayed(it, CHROME_AUTO_HIDE_MS)
+        }
     }
 
     fun bindTitle(name: String) {
@@ -598,7 +627,7 @@ class SinglePreviewOverlay(
         }
     }
 
-    /** 切换信息 overlay（再按一次关闭；3s 无操作自动隐藏，US-10）。 */
+    /** 切换信息 overlay（再按一次关闭；3s 无操作自动隐藏，US-10；唤出时连带标题复现）。 */
     fun toggleInfo(stats: PlaybackStats) {
         if (infoPanel.isVisible) {
             hideInfo()
@@ -609,24 +638,36 @@ class SinglePreviewOverlay(
 
     fun showInfo(stats: PlaybackStats) {
         infoView.text = formatStats(infoView.context, stats)
+        showChrome()
         infoPanel.isVisible = true
-        cancelInfoAutoHide()
-        infoHideRunnable = Runnable { infoPanel.isVisible = false }.also {
-            handler.postDelayed(it, INFO_AUTO_HIDE_MS)
-        }
     }
 
     fun hideInfo() {
-        cancelInfoAutoHide()
         infoPanel.isVisible = false
     }
 
-    private fun cancelInfoAutoHide() {
-        infoHideRunnable?.let { handler.removeCallbacks(it) }
-        infoHideRunnable = null
+    private fun cancelAutoHide() {
+        cancelChromeHide()
+        cancelHintHide()
+    }
+
+    private fun cancelChromeHide() {
+        chromeHideRunnable?.let { handler.removeCallbacks(it) }
+        chromeHideRunnable = null
+    }
+
+    private fun cancelHintHide() {
+        hintHideRunnable?.let { handler.removeCallbacks(it) }
+        hintHideRunnable = null
     }
 
     companion object {
+        /** 左上角 chrome（流信息 + 静音图标）自动隐藏延时（3s）。 */
+        const val CHROME_AUTO_HIDE_MS = 3_000L
+
+        /** 底部操作提示自动隐藏延时（每次进入预览 5s）。 */
+        const val HINT_AUTO_HIDE_MS = 5_000L
+
         /** info overlay 自动隐藏延时（US-10：3s）。 */
         const val INFO_AUTO_HIDE_MS = 3_000L
     }

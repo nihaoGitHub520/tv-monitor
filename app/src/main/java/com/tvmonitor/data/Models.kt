@@ -276,6 +276,7 @@ data class ReconnectConfig(
  * @property preferSubStream ONVIF 默认子码流（主理人裁决 4）；
  * @property bufferLimitMb 单路缓冲上限 MB（§6.2：8MB）；
  * @property maxResolutionHeight 解码分辨率高度上限（1080 保护低端盒；0 不限制）；
+ * @property autoStart 开机自动启动（2026-10-25 用户需求：BootReceiver 读取本项决定是否拉起主界面）；
  * @property logEnabled 日志开关（同步到 TvLog.enabled）。
  */
 data class AppSettings(
@@ -284,6 +285,7 @@ data class AppSettings(
     val preferSubStream: Boolean = true,
     val bufferLimitMb: Int = DEFAULT_BUFFER_LIMIT_MB,
     val maxResolutionHeight: Int = DEFAULT_MAX_RESOLUTION_HEIGHT,
+    val autoStart: Boolean = false,
     val logEnabled: Boolean = true,
 ) {
     companion object {

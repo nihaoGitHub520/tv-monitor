@@ -10,7 +10,8 @@
     <string name="app_name">TV 监控四分格</string>
 
     <!-- ==================== 主界面 / 四分格 ==================== -->
-    <string name="main_hint_bar">确认=单预览    菜单=源管理    设置=系统设置    返回=退出</string>
+    <!-- 底部常显提示条：第一行遥控器操作，第二行键盘/鼠标操作（2026-10-25 用户需求：简短） -->
+    <string name="main_hint_bar">遥控：确认=单预览  菜单=源管理  返回=退出\n键盘：1-4=单预览  Esc=返回  空格=播放/暂停  M=源管理  S=设置</string>
     <string name="slot_unconfigured">未配置</string>
 
     <!-- 播放状态（角标） -->
@@ -46,7 +47,8 @@
 
     <!-- ==================== 单预览 ==================== -->
     <string name="single_preview_title_format">单预览：%1$s</string>
-    <string name="hint_single_preview">返回=四分格    左/右=切换上一路/下一路    确认=播放/暂停    静音=仅当前路    Info=播放信息</string>
+    <!-- 单预览底部操作提示（每次进入预览显示 5s 后自动消失；含遥控与键盘等价键） -->
+    <string name="hint_single_preview">Esc/返回=四分格  左/右=切换上一路/下一路  确认/空格=播放/暂停  静音=仅当前路  Info=播放信息</string>
     <string name="info_resolution">分辨率</string>
     <string name="info_framerate">帧率</string>
     <string name="info_bitrate_video">视频码率</string>
@@ -176,10 +178,13 @@
     <string name="settings_keepalive_interval">后台保活重试间隔（秒）</string>
     <string name="settings_first_frame_rtsp">RTSP 首帧超时（秒）</string>
     <string name="settings_first_frame_hls">HLS 首帧超时（秒）</string>
-    <string name="settings_section_playback">播放</string>
-    <string name="settings_default_mute">默认全部静音</string>
-    <string name="settings_prefer_substream">ONVIF 默认子码流</string>
-    <string name="settings_buffer_mb">单路缓冲上限（MB）</string>
+        <string name="settings_section_playback">播放</string>
+        <string name="settings_default_mute">默认全部静音</string>
+        <string name="settings_prefer_substream">ONVIF 默认子码流</string>
+        <string name="settings_section_system">系统</string>
+        <string name="settings_autostart">开机自动启动</string>
+        <string name="settings_autostart_hint">开启后，设备开机将自动打开本应用并恢复四路播放</string>
+        <string name="settings_buffer_mb">单路缓冲上限（MB）</string>
     <string name="settings_max_resolution">解码分辨率上限</string>
     <string name="settings_resolution_1080p">1080p（低端盒子推荐）</string>
     <string name="settings_resolution_unlimited">不限制</string>

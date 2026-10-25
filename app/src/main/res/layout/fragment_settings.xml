@@ -120,6 +120,31 @@
                 android:checked="true" />
         </LinearLayout>
 
+        <!-- ============ 系统 ============ -->
+        <TextView
+            style="@style/SettingsSectionTitle"
+            android:text="@string/settings_section_system" />
+
+        <LinearLayout style="@style/SettingsRow">
+
+            <TextView
+                style="@style/SettingsLabel"
+                android:text="@string/settings_autostart" />
+
+            <Switch
+                android:id="@+id/switch_autostart"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/settings_autostart_hint"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
         <LinearLayout style="@style/SettingsRow">
 
             <TextView

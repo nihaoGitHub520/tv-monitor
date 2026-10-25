@@ -54,7 +54,8 @@ interface MenuKeyHandler {
  * 源管理 Fragment（T5 / US-08 / FR-P0-04）。
  *
  * 功能：源列表（名称/类型/地址/状态）、添加、编辑、删除、绑定格位、测试播放。
- * 交互：上下键移动焦点行；确认键 = 测试播放；菜单键 = 操作菜单（编辑/删除/绑定）。
+ * 交互：上下键移动焦点行；确认键/点击 = 进入编辑（2026-10-25 用户需求：
+ * 已添加的源再次点击即进入编辑修改）；菜单键 = 操作菜单（测试播放/编辑/删除/绑定）。
  */
 class SourceManageFragment : Fragment(), MenuKeyHandler {
 
@@ -283,9 +284,9 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
         ) : RecyclerView.ViewHolder(itemBinding.root) {
 
             init {
-                // 确认键 = 测试播放
+                // 确认键 / 鼠标点击 = 进入编辑（2026-10-25 用户需求）
                 itemBinding.root.setOnClickListener {
-                    items.getOrNull(bindingAdapterPosition)?.let { openTestPlay(it) }
+                    items.getOrNull(bindingAdapterPosition)?.let { openWizard(it.id) }
                 }
             }
 

@@ -176,6 +176,7 @@ class ModelsTest {
         assertTrue(settings.preferSubStream)
         assertEquals(8, settings.bufferLimitMb)
         assertEquals(1080, settings.maxResolutionHeight)
+        assertFalse(settings.autoStart)
         assertTrue(settings.logEnabled)
         assertEquals(listOf(5, 10, 20, 40, 60), settings.reconnect.delaysSec)
     }

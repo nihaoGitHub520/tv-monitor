@@ -62,6 +62,7 @@ class SettingsFragment : Fragment() {
         binding.etFfHls.setText(settings.reconnect.firstFrameTimeoutHlsSec.toString())
         binding.switchMute.isChecked = settings.defaultMute
         binding.switchSubstream.isChecked = settings.preferSubStream
+        binding.switchAutostart.isChecked = settings.autoStart
         binding.etBuffer.setText(settings.bufferLimitMb.toString())
         binding.rbRes1080p.isChecked = settings.maxResolutionHeight > 0
         binding.rbResUnlimited.isChecked = settings.maxResolutionHeight <= 0
@@ -116,6 +117,7 @@ class SettingsFragment : Fragment() {
             ),
             defaultMute = binding.switchMute.isChecked,
             preferSubStream = binding.switchSubstream.isChecked,
+            autoStart = binding.switchAutostart.isChecked,
             bufferLimitMb = bufferMb,
             maxResolutionHeight = if (binding.rbRes1080p.isChecked) 1080 else 0,
             logEnabled = binding.switchLog.isChecked,

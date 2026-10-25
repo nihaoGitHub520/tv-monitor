@@ -7,6 +7,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import android.os.SystemClock
 import com.tvmonitor.data.AspectMode
 import com.tvmonitor.data.PlaybackStats
 import com.tvmonitor.data.PlaybackStatus
@@ -96,6 +97,15 @@ class PlaybackSlot(
     private var keepaliveJob: Job? = null
     private var statsJob: Job? = null
 
+    /** 最近一次挂载/切换 surface 的时间（elapsedRealtime，看门狗窗口起点）。 */
+    private var lastAttachAt: Long = 0L
+
+    /** 最近一次强制恢复时间（冷却，防止慢网络场景频繁强恢复）。 */
+    private var lastForceRecoveryAt: Long = 0L
+
+    /** surface 切换 stall 看门狗任务。 */
+    private var surfaceWatchdogJob: Job? = null
+
     private val playerListener = object : Player.Listener {
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -173,14 +183,38 @@ class PlaybackSlot(
         prepareMedia()
     }
 
-    /** 挂载视图（四分格 / 单预览）。player 为 null 时先缓存视图，起流后自动挂载。 */
+    /**
+     * 挂载视图（四分格 / 单预览）。player 为 null 时先缓存视图，起流后自动挂载。
+     *
+     * **surface 切换顺序（2026-10-25 修复“单预览返回后画面暂停/冻结”的整体 bug）**：
+     * 先给新视图挂 player（video surface 从旧视图**直切**新视图，不经过“无 surface”中间态），
+     * 再摘旧视图的 player——此时 player 当前 holder 已是新视图的，
+     * [ExoPlayer.clearVideoSurfaceView] 命中身份守卫（`surfaceHolder == this.surfaceHolder`
+     * 才清除）为空操作，**不会释放解码器**。
+     *
+     * 与 media3 官方 `Util.switchTargetView` 的“先 attach 新视图再 detach 旧视图”模式一致。
+     * 旧实现先摘后挂，每次进出单预览都会“清空 surface → 解码器释放 → 重建”，
+     * 在雷电模拟器 / 低端盒子上该重建会挂起，表现为返回四分格后画面冻结（用户观感=暂停）。
+     */
     fun attachView(view: PlayerView) {
+        val oldView = attachedView
         attachedView = view
         // 应用源的播放比例（2026-10-25：单预览与四分格共用同一 resizeMode 语义）
         view.resizeMode = resizeModeFor(source?.aspectMode ?: AspectMode.FIT)
         // surface 切换后强制重新布局，确保画面按当前视图尺寸重排（修复返回小格不适配）
         view.requestLayout()
+        // 1) 新视图先拿 surface（直切，不解码器不释放）
         view.player = player
+        // 2) 旧视图后摘：对播放器是无害 no-op（身份守卫），但必须摘——
+        //    否则 PlayerView.setPlayer 的“同 player 早返回”会让下次挂载不刷新 surface
+        if (oldView != null && oldView !== view) {
+            oldView.player = null
+        }
+        // 3) 在线播放中切换 surface 才盯 stall（初次起流/重连由首帧 watchdog 负责）
+        if (_uiState.value.status == PlaybackStatus.ONLINE) {
+            lastAttachAt = SystemClock.elapsedRealtime()
+            startSurfaceWatchdog()
+        }
     }
 
     /** 卸载视图（切回四分格 / 释放）。仅当该视图正展示本槽 player 时摘除。 */
@@ -281,6 +315,69 @@ class PlaybackSlot(
                 )
             }
         }
+    }
+
+    /**
+     * surface 切换 stall 看门狗（2026-10-25 修复“单预览返回后画面暂停”兜底）：
+     *
+     * 低端盒 / 模拟器上切换视频输出 surface 后，解码器重新初始化可能挂起——
+     * 播放器自认为应播（playWhenReady=true）却长时间不出新帧，用户看到画面冻结。
+     * 挂载后 [SURFACE_SWITCH_STALL_MS] 内未恢复渲染（未回 STATE_READY）即
+     * [forceRecovery] 重建播放器恢复；只盯挂载后的短窗口，超窗口交既有重连策略。
+     */
+    private fun startSurfaceWatchdog() {
+        surfaceWatchdogJob?.cancel()
+        surfaceWatchdogJob = scope.launch {
+            while (isActive) {
+                delay(SURFACE_WATCHDOG_TICK_MS)
+                val active = player ?: return@launch
+                val now = SystemClock.elapsedRealtime()
+                // 只盯挂载后的短窗口；超窗口交既有重连策略（首帧 watchdog / 指数退避）
+                if (now - lastAttachAt > SURFACE_WATCHDOG_WINDOW_MS) return@launch
+                // 已恢复渲染
+                if (active.playbackState == Player.STATE_READY) return@launch
+                // 非应播状态不干预（用户暂停 / 空闲 / 已结束）
+                if (!active.playWhenReady ||
+                    active.playbackState == Player.STATE_IDLE ||
+                    active.playbackState == Player.STATE_ENDED
+                ) {
+                    return@launch
+                }
+                if (now - lastAttachAt < SURFACE_SWITCH_STALL_MS) continue
+                // 冷却：避免慢网络缓冲场景频繁强恢复
+                if (now - lastForceRecoveryAt < FORCE_RECOVERY_COOLDOWN_MS) return@launch
+                lastForceRecoveryAt = now
+                TvLog.w(
+                    TAG,
+                    "slot=$slotIndex surface 切换后 ${SURFACE_SWITCH_STALL_MS}ms 未恢复渲染，" +
+                        "强制重建播放器恢复",
+                )
+                forceRecovery()
+                return@launch
+            }
+        }
+    }
+
+    /**
+     * 强制恢复：释放旧 player 并重新起流（全新 codec + 重新挂载当前视图 surface）。
+     * 与 [retry] 的区别：retry 复用 player；本方法连 player 一起重建，
+     * 用于 surface 切换后解码器挂起、复用无法恢复的场景。
+     */
+    private fun forceRecovery() {
+        cancelAllJobs()
+        reconnectAttempt = 0
+        firstFrameSeen = false
+        _uiState.update {
+            it.copy(
+                status = PlaybackStatus.LOADING,
+                errorCode = null,
+                errorMessage = null,
+                countdownSec = 0,
+            )
+        }
+        releasePlayer()
+        prepareMedia()
+        TvLog.i(TAG, "slot=$slotIndex 强制恢复：已释放旧 player，重新起流")
     }
 
     /** 播放成功：重置重连计数，进入在线态，开启统计。 */
@@ -431,6 +528,7 @@ class PlaybackSlot(
         reconnectJob?.cancel(); reconnectJob = null
         keepaliveJob?.cancel(); keepaliveJob = null
         statsJob?.cancel(); statsJob = null
+        surfaceWatchdogJob?.cancel(); surfaceWatchdogJob = null
     }
 
     private fun releasePlayer() {
@@ -471,6 +569,18 @@ class PlaybackSlot(
     companion object {
         private const val TAG = "TvMonitor:PlaybackSlot"
         private const val STATS_INTERVAL_MS = 500L
+
+        /** surface 看门狗轮询粒度。 */
+        private const val SURFACE_WATCHDOG_TICK_MS = 500L
+
+        /** surface 切换后多久未恢复渲染判定为 stall（模拟器/低端盒解码器重建挂起）。 */
+        private const val SURFACE_SWITCH_STALL_MS = 5_000L
+
+        /** surface 看门狗监控窗口（超过后交既有重连策略，避免与网络缓冲混淆）。 */
+        private const val SURFACE_WATCHDOG_WINDOW_MS = 8_000L
+
+        /** 强制恢复冷却（防止慢网络缓冲场景频繁强恢复）。 */
+        private const val FORCE_RECOVERY_COOLDOWN_MS = 15_000L
 
         /** 播放比例 → media3 resizeMode（原比例 FIT / 16:9 裁切 ZOOM / 拉伸 FILL）。 */
         private fun resizeModeFor(mode: AspectMode): Int = when (mode) {

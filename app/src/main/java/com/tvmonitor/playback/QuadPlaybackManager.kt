@@ -255,9 +255,11 @@ class QuadPlaybackManager(
     /**
      * 进入单预览：把该槽 player attach 到 overlay 的 PlayerView。
      *
-     * 关键约束（T3 验收 3）：
-     * - 先摘除四分格视图（同一 player 不得同时挂两个 PlayerView）；
+     * 关键约束（T3 验收 3 + 2026-10-25 surface 冻结修复）：
      * - 全程不 stop / 不 prepare，仅切换视频输出目标；
+     * - 顺序“先挂 overlay 再摘格位”（见 [PlaybackSlot.attachView]）：
+     *   surface 直切不经过“无 surface”中间态，摘格位时身份守卫命中为空操作，
+     *   **不释放解码器**——与 media3 官方 switchTargetView 模式一致；
      * - 返回后由 [exitSinglePreview] 重新挂回四分格视图。
      *
      * @return true=进入成功；已在单预览态或槽位无源时返回 false。
@@ -270,9 +272,7 @@ class QuadPlaybackManager(
             TvLog.w(TAG, "slot=$slotIndex 未配置源，无法进入单预览")
             return false
         }
-        // 摘除四分格视图（player 继续播放，仅失去渲染目标）
-        slots[slotIndex].detachView()
-        // 挂到 overlay：attachView 内部完成 overlay.player = player（不 stop/prepare）
+        // 挂到 overlay（attachView 内部：先 overlay 拿 surface 直切，再摘格位——no-op）
         slots[slotIndex].attachView(overlay)
         overlayView = overlay
         singlePreviewIndex = slotIndex
@@ -281,19 +281,30 @@ class QuadPlaybackManager(
         return true
     }
 
-    /** 退出单预览：摘除 overlay，恢复四分格视图挂载（四路不中断）。 */
+    /**
+     * 退出单预览：恢复四分格视图挂载（四路不中断）。
+     *
+     * surface 顺序（2026-10-25 修复“返回后画面暂停/冻结”的整体 bug）：
+     * **先挂格位再摘 overlay**——格位 surface 一直存在，player 的 video surface
+     * 从 overlay 直切格位，不经过“无 surface”中间态；摘 overlay 时身份守卫命中
+     * （当前 holder 已是格位的）为空操作，不释放解码器。
+     * 旧实现先摘 overlay 再挂格位，触发“清 surface → 解码器释放 → 重建”，
+     * 在模拟器/低端盒上重建挂起 → 画面冻结。
+     */
     fun exitSinglePreview() {
         val index = singlePreviewIndex ?: return
-        slots[index].detachView()
-        overlayView?.player = null
+        quadViews[index]?.let { slots[index].attachView(it) }
         overlayView = null
         singlePreviewIndex = null
-        quadViews[index]?.let { slots[index].attachView(it) }
         TvLog.i(TAG, "退出单预览，恢复四分格")
     }
 
     /**
      * 单预览内切换上一路/下一路（仅在有源槽位间轮转）。
+     *
+     * surface 顺序（同 [exitSinglePreview]）：先把当前路挂回它自己的格位
+     * （surface 从 overlay 直切格位，不释放 codec），再把新路挂到 overlay——
+     * 此时 setPlayer 内部对旧 player 的 clear 因 holder 已变而是 no-op。
      *
      * 静音语义（US-09）：切走后原槽恢复其自身静音状态，新槽应用其状态，不串台。
      */
@@ -301,11 +312,14 @@ class QuadPlaybackManager(
         val current = singlePreviewIndex ?: return false
         val next = nextConfiguredSlot(current, delta)
         if (next == null || next == current) return false
-        slots[current].detachView()
+        // 1) 当前路先挂回自己的格位（直切，不释放 codec）
+        val currentQuad = quadViews[current] ?: return false
+        slots[current].attachView(currentQuad)
         slots[current].setMuted(mutedStates[current])
+        // 2) 新路再挂 overlay（对旧 player 的 clear 为 no-op）
         slots[next].attachView(overlay)
-        singlePreviewIndex = next
         slots[next].setMuted(mutedStates[next])
+        singlePreviewIndex = next
         TvLog.i(TAG, "单预览切路：$current -> $next")
         return true
     }
