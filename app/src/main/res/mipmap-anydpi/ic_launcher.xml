@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图标兼容版（API 24/25 无 adaptive-icon，直接矢量图） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF0B0E11"
+        android:pathData="M0,0h108v108H0V0z" />
+    <path
+        android:fillColor="#FF22262C"
+        android:pathData="M26,32h56v44H26V32z" />
+    <path
+        android:fillColor="#FF29B6F6"
+        android:pathData="M31,37h46v34H31V37z" />
+    <path
+        android:fillColor="#FF0B0E11"
+        android:pathData="M49,46l16,10 -16,10V46z" />
+    <path
+        android:fillColor="#FF22262C"
+        android:pathData="M49,76h10v8H49zM44,84h20v5H44z" />
+</vector>

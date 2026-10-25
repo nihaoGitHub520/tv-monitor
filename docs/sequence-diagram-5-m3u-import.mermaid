@@ -1,0 +1,14 @@
+sequenceDiagram
+    actor U as 用户
+    participant AF as AddSourceFragment
+    participant AVM as AddSourceViewModel
+    participant MP as M3uParser
+    participant SS as SourceStore
+
+    U->>AF: 「导入 .m3u/.m3u8 文件」（SAF 选择器）
+    AF->>AVM: importM3u(uri)
+    AVM->>AVM: 读取文本（IO，UTF-8/BOM 容错）
+    AVM->>MP: parse(content, baseUrl)
+    MP-->>AVM: entries + errors（行号+原因）
+    AVM->>SS: 批量 upsert（按 URL 去重）
+    AVM-->>AF: 导入结果：成功 N 条 / 跳过 M 条 / 失败 K 条（含原因）

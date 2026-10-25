@@ -1,0 +1,231 @@
+classDiagram
+    direction LR
+
+    class SourceType {
+        <<enumeration>>
+        ONVIF
+        STREAM
+        M3U8
+        FILE
+    }
+    class SourceStatus {
+        <<enumeration>>
+        UNCONFIGURED
+        CONNECTING
+        BUFFERING
+        PLAYING
+        RECONNECTING
+        ERROR
+        UNSUPPORTED
+    }
+    class VideoSource {
+        +String id
+        +String name
+        +SourceType type
+        +String uri
+        +OnvifEndpoint? onvif
+        +Boolean preferSubStream
+        +SourceStatus runtimeStatus
+    }
+    class OnvifEndpoint {
+        +String deviceServiceUrl
+        +String profileToken
+        +String username
+        +String passwordEnc
+        +String? cachedStreamUri
+    }
+    class OnvifProfile {
+        +String token
+        +String name
+        +Int width
+        +Int height
+        +Int fps
+        +String encoding
+        +Boolean isMain
+    }
+    class OnvifDeviceInfo {
+        +String manufacturer
+        +String model
+        +String firmware
+        +String serial
+    }
+    class DiscoveredOnvifDevice {
+        +String name
+        +String ip
+        +Int port
+        +List~String~ xAddrs
+        +List~String~ scopes
+        +Long lastSeen
+    }
+    class GridBinding {
+        +Int slotIndex
+        +String? sourceId
+    }
+    class ReconnectConfig {
+        +Long initialDelayMs
+        +Long maxDelayMs
+        +Int maxAttempts
+        +Int backoffFactor
+    }
+    class AppSettings {
+        +List~GridBinding~ bindings
+        +ReconnectConfig reconnect
+        +Boolean preferSubStream
+        +Boolean autoBoot
+        +Boolean logEnabled
+    }
+    class SourceStore {
+        <<interface>>
+        +observe() Flow~List~VideoSource~~
+        +suspend load() List~VideoSource~
+        +suspend upsert(VideoSource) AppResult~Unit~
+        +suspend delete(String) AppResult~Unit~
+        +suspend findById(String) VideoSource?
+    }
+    class JsonSourceStore
+    class CredentialCrypto {
+        +encrypt(String) String
+        +decrypt(String) String
+    }
+    class M3uParser {
+        +parse(String, String?) M3uParseResult
+    }
+    class M3uEntry {
+        +String name
+        +String url
+        +Double duration
+        +String? group
+    }
+    class M3uParseResult {
+        +List~M3uEntry~ entries
+        +List~M3uParseError~ errors
+    }
+    class OnvifDiscovery {
+        +suspend discover(Int) List~DiscoveredOnvifDevice~
+    }
+    class OnvifClient {
+        +suspend getDeviceInfo(OnvifEndpoint) AppResult~OnvifDeviceInfo~
+        +suspend getProfiles(OnvifEndpoint) AppResult~List~OnvifProfile~~
+        +suspend getStreamUri(OnvifEndpoint, String, String) AppResult~String~
+        +ptz(OnvifEndpoint) OnvifPtzClient
+    }
+    class OnvifPtzClient {
+        <<interface>>
+        +suspend continuousMove(String, Float, Float, Float)
+        +suspend stop(String)
+        +suspend gotoPreset(String, String)
+        +suspend getPresets(String) List~OnvifPreset~
+    }
+    class PlayProtocol {
+        <<enumeration>>
+        RTSP
+        RTSPS
+        HLS
+        DASH
+        FILE
+        OTHER
+    }
+    class PlayableUri {
+        +String uri
+        +Map~String,String~ headers
+        +PlayProtocol protocol
+    }
+    class SourceUriResolver {
+        <<interface>>
+        +supports(VideoSource) Boolean
+        +suspend resolve(VideoSource) AppResult~PlayableUri~
+    }
+    class RtspStreamResolver
+    class HlsResolver
+    class FileResolver
+    class DirectLinkResolver
+    class ResolverRegistry {
+        +suspend resolve(VideoSource) AppResult~PlayableUri~
+    }
+    class PlayerFactory {
+        +create(PlayableUri) ExoPlayer
+    }
+    class QuadPlaybackManager {
+        -List~PlaybackSlot~ slots
+        +bindSlot(Int, String?)
+        +enterPreview(Int)
+        +exitPreview()
+        +switchChannel(Int, VideoSource)
+        +setMuted(Int, Boolean)
+        +probe(VideoSource, Long) AppResult~Unit~
+        +observeSlotUiStates() Flow~List~SlotUiState~~
+        +releaseAll()
+    }
+    class PlaybackSlot {
+        +Int index
+        +VideoSource? source
+        +SourceStatus state
+        +PlaybackStats stats
+        +bind(VideoSource?)
+        +attach(PlayerView)
+        +detach()
+        +retry()
+        +release()
+    }
+    class PlaybackStats {
+        +Int width
+        +Int height
+        +Int fps
+        +Int bitrateKbps
+        +Int bufferMs
+        +Int droppedFrames
+    }
+    class SlotUiState {
+        +Int index
+        +String sourceName
+        +SourceStatus status
+        +PlaybackStats stats
+    }
+    class MainActivity
+    class QuadGridView
+    class SlotView
+    class SinglePreviewOverlay
+    class SourceListFragment
+    class SourceListViewModel
+    class AddSourceFragment
+    class AddSourceViewModel
+    class SettingsFragment
+
+    VideoSource --> SourceType
+    VideoSource --> OnvifEndpoint
+    VideoSource --> SourceStatus
+    AppSettings --> GridBinding
+    AppSettings --> ReconnectConfig
+    JsonSourceStore ..|> SourceStore
+    JsonSourceStore --> CredentialCrypto
+    M3uParser ..> M3uEntry
+    M3uParser ..> M3uParseResult
+    OnvifClient ..> OnvifDeviceInfo
+    OnvifClient ..> OnvifProfile
+    OnvifClient ..> OnvifPtzClient
+    RtspStreamResolver ..|> SourceUriResolver
+    HlsResolver ..|> SourceUriResolver
+    FileResolver ..|> SourceUriResolver
+    DirectLinkResolver ..|> SourceUriResolver
+    ResolverRegistry --> SourceUriResolver
+    SourceUriResolver ..> PlayableUri
+    PlayableUri --> PlayProtocol
+    QuadPlaybackManager --> PlaybackSlot
+    QuadPlaybackManager --> PlayerFactory
+    QuadPlaybackManager --> ResolverRegistry
+    QuadPlaybackManager ..> SlotUiState
+    PlaybackSlot --> VideoSource
+    PlaybackSlot --> SourceStatus
+    PlaybackSlot --> PlaybackStats
+    MainActivity --> QuadGridView
+    QuadGridView --> SlotView
+    MainActivity --> SinglePreviewOverlay
+    MainActivity ..> QuadPlaybackManager
+    SourceListFragment ..> SourceListViewModel
+    SourceListViewModel ..> SourceStore
+    AddSourceFragment ..> AddSourceViewModel
+    AddSourceViewModel ..> OnvifDiscovery
+    AddSourceViewModel ..> OnvifClient
+    AddSourceViewModel ..> M3uParser
+    AddSourceViewModel ..> SourceStore
+    SettingsFragment ..> SourceStore

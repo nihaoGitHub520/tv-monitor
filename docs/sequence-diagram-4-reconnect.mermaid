@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant EXO as ExoPlayer
+    participant PS as PlaybackSlot
+    participant RP as ReconnectPolicy
+    participant SV as SlotView
+    participant QM as QuadPlaybackManager
+
+    EXO->>PS: onPlayerError(IOException 超时/断流)
+    PS->>SV: 状态 = RECONNECTING（显示倒计时）
+    PS->>RP: nextDelay(attempt)
+    RP-->>PS: 5s → 10s → 20s → 40s → 60s（封顶）
+    PS->>PS: delay 到期 → 重建 MediaSource（必要时重新 resolve URI）→ prepare
+    alt 恢复成功
+        EXO-->>PS: STATE_READY + onRenderedFirstFrame
+        PS->>SV: 状态 = PLAYING（attempt 清零）
+    else 失败且 attempt < 10
+        PS->>PS: attempt++，按退避继续
+    else 达到 maxAttempts
+        PS->>SV: 状态 = ERROR（保留手动重试入口）
+        QM->>QM: 后台保活：每 60s 自动重试一次
+    end
+    Note over PS,SV: 各格独立 scope + 独立 player<br/>其他三路完全不受影响

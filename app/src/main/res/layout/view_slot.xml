@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  单格 SlotView 布局（四分格每格）：
+  - PlayerView 占满，letterbox 保持宽高比（app:resize_mode="fit"）；
+  - 顶部角标：状态点 + 源名；
+  - 底部浮层：重连倒计时 / 错误 + 手动重试；
+  - 焦点描边：3dp 主题色（slot_focus_border），焦点变化时代码切换可见性。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/slot_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_slot"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/player_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:keep_content_on_player_reset="true"
+        app:resize_mode="fit"
+        app:shutter_background_color="@color/black"
+        app:surface_type="surface_view"
+        app:use_controller="false" />
+
+    <!-- 未配置占位 -->
+    <ImageView
+        android:id="@+id/slot_placeholder"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:contentDescription="@string/cd_placeholder"
+        android:src="@drawable/ic_placeholder" />
+
+    <!-- 焦点描边（3dp 主题色） -->
+    <View
+        android:id="@+id/slot_focus_border"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/slot_focus_border"
+        android:visibility="gone" />
+
+    <!-- 顶部角标：状态点 + 源名 -->
+    <LinearLayout
+        android:id="@+id/slot_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:background="@drawable/badge_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="4dp">
+
+        <ImageView
+            android:id="@+id/slot_status_dot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:contentDescription="@string/cd_status_dot"
+            android:src="@drawable/status_dot" />
+
+        <TextView
+            android:id="@+id/slot_source_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <!-- 静音指示（US-09：默认四路静音，仅当前路可取消） -->
+        <ImageView
+            android:id="@+id/slot_mute_icon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@string/cd_mute_state"
+            android:src="@drawable/ic_volume_off"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 底部浮层：重连倒计时 / 错误 + 手动重试 -->
+    <LinearLayout
+        android:id="@+id/slot_error_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/badge_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/slot_error_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/slot_retry_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="12dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="4dp"
+            android:text="@string/action_manual_retry"
+            android:textColor="@color/focus"
+            android:textSize="13sp"
+            android:visibility="gone"
+            style="?android:attr/borderlessButtonStyle" />
+    </LinearLayout>
+
+</FrameLayout>

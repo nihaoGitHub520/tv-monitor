@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- tv-monitor 配色：深色监控大屏风格，主题色青蓝用于焦点描边 -->
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- 背景层次 -->
+    <color name="background">#FF0B0E11</color>
+    <color name="surface">#FF15181D</color>
+    <color name="surface_variant">#FF22262C</color>
+    <color name="divider">#33FFFFFF</color>
+
+    <!-- 主题色（焦点） -->
+    <color name="focus">#FF29B6F6</color>
+    <color name="focus_dim">#4D29B6F6</color>
+    <color name="focus_scrim">#2629B6F6</color>
+
+    <!-- 文本 -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#B3FFFFFF</color>
+    <color name="text_hint">#80FFFFFF</color>
+    <color name="text_on_focus">#FF00304A</color>
+
+    <!-- 状态色 -->
+    <color name="status_online">#FF4CAF50</color>
+    <color name="status_reconnecting">#FFFFB300</color>
+    <color name="status_offline">#FFF44336</color>
+    <color name="status_idle">#FF9E9E9E</color>
+    <color name="status_loading">#FF29B6F6</color>
+
+    <!-- 遮罩 -->
+    <color name="scrim">#99000000</color>
+    <color name="scrim_light">#66000000</color>
+
+    <!-- 启动图标 -->
+    <color name="ic_launcher_background">#FF0B0E11</color>
+</resources>

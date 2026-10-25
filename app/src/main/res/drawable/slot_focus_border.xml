@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 四分格焦点描边：3dp 主题色圆角边框，覆盖在 SlotView 之上（D-pad 焦点可见） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <stroke
+        android:width="3dp"
+        android:color="@color/focus" />
+    <corners android:radius="4dp" />
+</shape>

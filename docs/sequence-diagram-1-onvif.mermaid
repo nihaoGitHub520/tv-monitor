@@ -1,0 +1,28 @@
+sequenceDiagram
+    actor U as 用户(遥控器)
+    participant AF as AddSourceFragment
+    participant AVM as AddSourceViewModel
+    participant OD as OnvifDiscovery
+    participant OC as OnvifClient
+    participant SS as SourceStore
+    participant QM as QuadPlaybackManager
+
+    U->>AF: 选择「ONVIF 设备 → 自动发现」
+    AF->>AVM: startDiscovery()
+    AVM->>OD: discover(timeoutMs=4000)
+    OD->>OD: 组播 Probe 至 239.255.255.250:3702
+    OD-->>AVM: List~DiscoveredOnvifDevice~（名称/IP/端口）
+    AVM-->>AF: 渲染设备列表
+    U->>AF: 选中设备，输入账号/密码
+    AF->>AVM: connectAndLoadProfiles(device, user, pwd)
+    AVM->>OC: getDeviceInfo(endpoint)
+    OC-->>AVM: 厂商/型号/固件
+    AVM->>OC: getProfiles(endpoint)
+    OC-->>AVM: 主/子码流 Profile 列表
+    AVM->>OC: getStreamUri(endpoint, profileToken)
+    OC-->>AVM: rtsp://...（默认子码流，可改选主码流）
+    U->>AF: 命名 → 选择格位 → 保存
+    AF->>AVM: save(source, slotIndex)
+    AVM->>SS: upsert(source)（密码经 Keystore 加密）
+    AVM->>QM: bindSlot(slotIndex, source.id)
+    QM->>QM: 该格起播，其余三格不受影响

@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  tv-monitor 全量字符串资源（简体中文）。
+  约定（ARCHITECTURE.md §11）：所有用户可见文案必须进本文件，布局与代码不得硬编码中文。
+  命名：<界面/模块>_<语义>，格式化串以 _format 结尾。
+-->
+<resources>
+
+    <!-- ==================== 应用 ==================== -->
+    <string name="app_name">TV 监控四分格</string>
+
+    <!-- ==================== 主界面 / 四分格 ==================== -->
+    <string name="main_hint_bar">确认=单预览    菜单=源管理    设置=系统设置    返回=退出</string>
+    <string name="slot_unconfigured">未配置</string>
+
+    <!-- 播放状态（角标） -->
+    <string name="status_online">在线</string>
+    <string name="status_loading">加载中</string>
+    <string name="status_reconnecting">重连中</string>
+    <string name="status_error">错误</string>
+    <string name="status_offline">离线</string>
+    <string name="status_idle">空闲</string>
+
+    <!-- 重连提示 -->
+    <string name="reconnect_countdown_format">网络中断，%1$d 秒后第 %2$d 次重试</string>
+    <string name="reconnect_give_up_format">重连失败（已 %1$d 次），转入后台保活重试</string>
+    <string name="reconnect_manual_hint">请检查网络后手动重试</string>
+    <string name="action_retry">重试</string>
+    <string name="action_manual_retry">手动重试</string>
+
+    <!-- 错误 -->
+    <string name="playback_error_format">播放失败：%1$s</string>
+    <string name="error_unsupported_protocol">暂不支持该协议（rtmp / http-flv）</string>
+    <string name="error_source_not_found">视频源不存在</string>
+
+    <!-- 退出确认 -->
+    <string name="exit_confirm_title">退出确认</string>
+    <string name="exit_confirm_message">确定要退出吗？四路播放将全部停止。</string>
+    <string name="action_exit">退出</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_confirm">确定</string>
+
+    <!-- 菜单键 -->
+    <string name="menu_source_manage">源管理</string>
+    <string name="menu_settings">设置</string>
+
+    <!-- ==================== 单预览 ==================== -->
+    <string name="single_preview_title_format">单预览：%1$s</string>
+    <string name="hint_single_preview">返回=四分格    左/右=切换上一路/下一路    确认=播放/暂停    静音=仅当前路    Info=播放信息</string>
+    <string name="info_resolution">分辨率</string>
+    <string name="info_framerate">帧率</string>
+    <string name="info_bitrate_video">视频码率</string>
+    <string name="info_bitrate_audio">音频码率</string>
+    <string name="info_buffer">缓冲延迟</string>
+    <string name="info_dropped_frames">丢帧</string>
+    <string name="info_unknown">--</string>
+    <string name="info_value_format">%1$s：%2$s</string>
+    <string name="action_mute">静音</string>
+    <string name="action_unmute">取消静音</string>
+    <string name="action_prev_source">上一路</string>
+    <string name="action_next_source">下一路</string>
+    <string name="action_play_pause">播放/暂停</string>
+    <string name="action_paused">已暂停</string>
+    <string name="action_playing">播放中</string>
+    <string name="muted_hint">已静音</string>
+    <string name="unmuted_hint">已取消静音（仅当前路）</string>
+
+    <!-- ==================== 源管理 ==================== -->
+    <string name="title_source_manage">视频源管理</string>
+    <string name="action_add_source">添加源</string>
+    <string name="action_edit">编辑</string>
+    <string name="action_delete">删除</string>
+    <string name="action_bind_slot">绑定到格位</string>
+    <string name="action_test_play">测试播放</string>
+    <string name="source_list_empty">暂无视频源，请选择“添加源”</string>
+    <string name="column_name">名称</string>
+    <string name="column_type">类型</string>
+    <string name="column_address">地址</string>
+    <string name="column_status">状态</string>
+    <string name="delete_source_confirm_format">确定删除视频源“%1$s”吗？</string>
+    <string name="source_saved">已保存</string>
+    <string name="source_deleted">已删除</string>
+    <string name="source_bound_format">已绑定到第 %1$d 格</string>
+    <string name="source_unbound">已取消格位绑定</string>
+    <string name="slot_label_format">第 %1$d 格</string>
+    <string name="slot_none">未绑定格位</string>
+    <string name="test_play_title">测试播放</string>
+    <string name="test_play_playing">正在测试播放，按返回键关闭</string>
+
+    <!-- 源类型 -->
+    <string name="type_onvif">ONVIF 设备</string>
+    <string name="type_stream">推流/直链</string>
+    <string name="type_m3u8">M3U8/HLS</string>
+    <string name="type_file">本地文件</string>
+    <string name="type_unknown">未知</string>
+
+    <!-- ==================== 添加/编辑源向导 ==================== -->
+    <string name="wizard_title_add">添加视频源</string>
+    <string name="wizard_title_edit">编辑视频源</string>
+    <string name="wizard_step_select_type">选择视频源类型</string>
+    <string name="wizard_step_onvif">ONVIF 设备参数</string>
+    <string name="wizard_step_stream">推流直链参数</string>
+    <string name="wizard_step_m3u8">M3U8 直播链接</string>
+    <string name="wizard_step_file">本地视频文件</string>
+    <string name="wizard_step_finish">命名与格位绑定</string>
+    <string name="action_next">下一步</string>
+    <string name="action_prev">上一步</string>
+    <string name="action_save">保存</string>
+    <string name="action_scan">自动发现</string>
+    <string name="action_test_connection">测试连接</string>
+    <string name="action_connect">连接设备</string>
+    <string name="action_choose_file">选择文件</string>
+    <string name="action_import_m3u">导入 m3u/m3u8 文件</string>
+    <string name="field_name">名称</string>
+    <string name="field_ip">IP 地址</string>
+    <string name="field_port">端口</string>
+    <string name="field_username">账号</string>
+    <string name="field_password">密码</string>
+    <string name="field_address">流地址</string>
+    <string name="field_url">M3U8 链接</string>
+    <string name="field_substream">优先使用子码流</string>
+
+    <!-- ONVIF -->
+    <string name="onvif_discovering">正在扫描局域网 ONVIF 设备…</string>
+    <string name="onvif_discover_empty">未发现设备，请检查网络或改用手动添加</string>
+    <string name="onvif_discover_done_format">发现 %1$d 台设备，按上下键选择</string>
+    <string name="onvif_manual_hint">或手动填写 IP / 端口 / 账号密码</string>
+    <string name="onvif_connecting">正在连接设备…</string>
+    <string name="onvif_connected">连接成功，请选择码流</string>
+    <string name="onvif_device_info_format">厂商：%1$s    型号：%2$s</string>
+    <string name="onvif_profiles_title">选择码流（默认推荐子码流）</string>
+    <string name="onvif_profile_main">主码流</string>
+    <string name="onvif_profile_sub">子码流</string>
+    <string name="onvif_profile_format">%1$s：%2$s</string>
+    <string name="onvif_profile_unknown">未命名码流</string>
+
+    <!-- 文件选择 -->
+    <string name="file_picked_format">已选择：%1$s</string>
+
+    <!-- m3u 导入 -->
+    <string name="m3u_import_result_format">导入完成：成功 %1$d，跳过 %2$d，失败 %3$d</string>
+    <string name="m3u_import_reason_dup">地址重复</string>
+    <string name="m3u_import_reason_unsupported">协议暂不支持</string>
+    <string name="m3u_import_reason_parse">行格式错误</string>
+    <string name="m3u_import_detail_format">%1$s（%2$s）</string>
+
+    <!-- 连接测试 -->
+    <string name="test_connecting">连接测试中…</string>
+    <string name="test_success">连接成功</string>
+    <string name="test_failed_format">连接失败：%1$s</string>
+
+    <!-- ==================== 表单校验 ==================== -->
+    <string name="error_name_empty">名称不能为空</string>
+    <string name="error_ip_invalid">IP 地址格式不正确</string>
+    <string name="error_port_invalid">端口必须是 1-65535 的整数</string>
+    <string name="error_username_empty">账号不能为空</string>
+    <string name="error_password_empty">密码不能为空</string>
+    <string name="error_address_empty">流地址不能为空</string>
+    <string name="error_address_protocol">地址须以 rtsp://、rtsps://、http:// 或 https:// 开头</string>
+    <string name="error_url_invalid">链接须以 http:// 或 https:// 开头</string>
+    <string name="error_file_not_selected">请选择视频文件</string>
+    <string name="error_profile_not_selected">请选择码流</string>
+    <string name="error_device_not_connected">请先连接设备获取码流列表</string>
+
+    <!-- ==================== 设置 ==================== -->
+    <string name="title_settings">系统设置</string>
+    <string name="settings_section_reconnect">重连策略</string>
+    <string name="settings_reconnect_delays">退避时间（秒，逗号分隔）</string>
+    <string name="settings_max_retries">单轮最大重试次数</string>
+    <string name="settings_keepalive_interval">后台保活重试间隔（秒）</string>
+    <string name="settings_first_frame_rtsp">RTSP 首帧超时（秒）</string>
+    <string name="settings_first_frame_hls">HLS 首帧超时（秒）</string>
+    <string name="settings_section_playback">播放</string>
+    <string name="settings_default_mute">默认全部静音</string>
+    <string name="settings_prefer_substream">ONVIF 默认子码流</string>
+    <string name="settings_buffer_mb">单路缓冲上限（MB）</string>
+    <string name="settings_max_resolution">解码分辨率上限</string>
+    <string name="settings_resolution_1080p">1080p（低端盒子推荐）</string>
+    <string name="settings_resolution_unlimited">不限制</string>
+    <string name="settings_section_about">关于</string>
+    <string name="settings_log_enabled">启用日志输出</string>
+    <string name="settings_version_format">版本 %1$s</string>
+    <string name="settings_saved">设置已保存</string>
+    <string name="settings_invalid_number">请输入有效数字</string>
+    <string name="settings_invalid_delays">退避时间格式不正确，示例：5,10,20,40,60</string>
+
+    <!-- ==================== 错误文案（UI 映射） ==================== -->
+    <string name="error_auth_failed">认证失败，请检查账号密码</string>
+    <string name="error_timeout">连接超时，请检查网络或设备状态</string>
+    <string name="error_network">网络不可达，请检查连接</string>
+    <string name="error_parse">播放数据解析失败</string>
+    <string name="error_invalid_input">输入内容无效</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="error_file_read_failed">文件读取失败</string>
+
+    <!-- ==================== 默认命名（向导自动生成） ==================== -->
+    <string name="default_name_onvif">摄像头 %1$s</string>
+    <string name="default_name_stream">直播流 %1$s</string>
+    <string name="default_name_m3u8">HLS 流 %1$s</string>
+    <string name="default_name_file">本地视频 %1$s</string>
+
+    <!-- ==================== 云台（P1 预留） ==================== -->
+    <string name="ptz_panel_title">云台控制</string>
+    <string name="ptz_not_supported">当前设备不支持云台控制</string>
+    <string name="ptz_up">上</string>
+    <string name="ptz_down">下</string>
+    <string name="ptz_left">左</string>
+    <string name="ptz_right">右</string>
+    <string name="ptz_zoom_in">放大</string>
+    <string name="ptz_zoom_out">缩小</string>
+
+    <!-- ==================== 通知/浮层 ==================== -->
+    <string name="cd_placeholder">画面占位</string>
+    <string name="cd_status_dot">状态指示</string>
+    <string name="cd_mute_state">静音状态</string>
+    <string name="cd_add_source">添加视频源</string>
+    <string name="cd_edit_source">编辑视频源</string>
+    <string name="cd_delete_source">删除视频源</string>
+    <string name="cd_scan_devices">扫描局域网设备</string>
+    <string name="cd_import_m3u">导入播放列表文件</string>
+    <string name="cd_choose_file">选择视频文件</string>
+    <string name="cd_test_connection">测试连接</string>
+    <string name="cd_retry">重新播放</string>
+    <string name="cd_settings">系统设置</string>
+    <string name="cd_source_list">视频源列表</string>
+
+</resources>

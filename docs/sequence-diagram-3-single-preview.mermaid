@@ -1,0 +1,23 @@
+sequenceDiagram
+    actor U as 用户
+    participant QV as QuadGridView
+    participant MA as MainActivity
+    participant QM as QuadPlaybackManager
+    participant PS as PlaybackSlot
+    participant PV as SinglePreviewOverlay
+
+    U->>QV: 焦点格 + 确认键
+    QV->>MA: onSlotConfirmed(index)
+    MA->>QM: enterPreview(index)
+    QM->>PS: detach()（PlayerView.player = null）
+    Note right of PS: 播放不中断<br/>（player 保持 STATE_READY）
+    QM->>PV: attach(slot.player)（全屏 PlayerView.player = slot.player）
+    MA->>MA: Overlay 可见（整体 < 300ms）
+    U->>PV: 左/右键
+    PV->>QM: switchChannel()（与另一格交换 attach 目标）
+    U->>PV: info 键
+    PV->>PV: 显示统计 overlay，3s 后自动隐藏
+    U->>PV: 返回键
+    PV->>QM: exitPreview()
+    QM->>QV: 重新 attach 到格位 PlayerView
+    Note over QV: 四路全程未 stop/prepare

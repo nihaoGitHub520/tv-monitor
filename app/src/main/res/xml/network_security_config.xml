@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置：内网监控场景必须放通 cleartext（ONVIF SOAP / 部分 m3u8 / rtsp 旁路）。
+  仅信任系统 CA，不引入用户证书，避免中间人风险。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

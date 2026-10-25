@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 未配置/无信号占位图标：矩形屏幕 + 斜杠 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4,6h16v12H4V6zM4,6"
+        android:strokeColor="#66FFFFFF"
+        android:strokeWidth="1.5" />
+    <path
+        android:pathData="M6,18L18,6"
+        android:strokeColor="#66FFFFFF"
+        android:strokeWidth="1.5" />
+    <path
+        android:pathData="M9,20h6v1.5H9z"
+        android:fillColor="#66FFFFFF" />
+</vector>

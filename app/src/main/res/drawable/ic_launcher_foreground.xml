@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图标前景：108dp 画布，图形收在内侧 72dp 安全区（四周各留 18dp） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 屏幕 -->
+    <path
+        android:fillColor="#FF22262C"
+        android:pathData="M26,32h56v44H26V32z" />
+    <path
+        android:fillColor="#FF29B6F6"
+        android:pathData="M31,37h46v34H31V37z" />
+    <!-- 播放三角 -->
+    <path
+        android:fillColor="#FF0B0E11"
+        android:pathData="M49,46l16,10 -16,10V46z" />
+    <!-- 支架 -->
+    <path
+        android:fillColor="#FF22262C"
+        android:pathData="M49,76h10v8H49zM44,84h20v5H44z" />
+</vector>

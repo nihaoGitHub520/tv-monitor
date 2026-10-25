@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 底部渐变遮罩：用于角标/提示条衬底，保证文字在画面上可读 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="90"
+        android:endColor="@color/scrim"
+        android:startColor="@android:color/transparent"
+        android:type="linear" />
+</shape>

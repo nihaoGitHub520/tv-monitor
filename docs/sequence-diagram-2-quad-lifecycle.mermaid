@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant App as TvMonitorApp
+    participant MA as MainActivity
+    participant QV as QuadGridView
+    participant QM as QuadPlaybackManager
+    participant SS as SourceStore
+    participant PS as PlaybackSlot
+
+    App->>QM: 创建单例（Application 作用域）
+    MA->>SS: load() 绑定关系
+    SS-->>MA: List~GridBinding~
+    MA->>QV: 渲染 4 个 SlotView
+    MA->>QM: restore(bindings)
+    loop 每个格位（并行，互不影响）
+        QM->>PS: bind(source)
+        PS->>PS: resolver 归一化 URI → 创建 ExoPlayer → prepare
+        PS-->>QV: attach(slot.playerView)
+    end
+    MA->>MA: 获取 PARTIAL_WAKE_LOCK + FLAG_KEEP_SCREEN_ON
+    Note over MA: 退后台不 release 播放器（大屏无人值守）<br/>仅 onDestroy/主动退出时 releaseAll
+    Note over QM: 网络恢复回调 → 对 RECONNECTING/ERROR 格触发 retry

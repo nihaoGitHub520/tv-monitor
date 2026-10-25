@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TV 启动横幅（banner，320x180）：深色底 + 监控屏幕 + 播放符。
+  仅用于启动器图标，不承载文字。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- 背景 -->
+    <path
+        android:fillColor="#FF0B0E11"
+        android:pathData="M0,0h320v180H0V0z" />
+    <!-- 屏幕外框 -->
+    <path
+        android:fillColor="#FF22262C"
+        android:pathData="M60,38h200v104H60V38z" />
+    <!-- 屏幕内画面 -->
+    <path
+        android:fillColor="#FF29B6F6"
+        android:pathData="M72,50h176v80H72V50z" />
+    <!-- 播放三角 -->
+    <path
+        android:fillColor="#FF0B0E11"
+        android:pathData="M146,78l34,20 -34,20V78z" />
+    <!-- 支架 -->
+    <path
+        android:fillColor="#FF22262C"
+        android:pathData="M150,142h20v14h-20zM130,156h60v8h-60z" />
+    <!-- 四格示意角标 -->
+    <path
+        android:fillColor="#FF4CAF50"
+        android:pathData="M282,50h12v12h-12z" />
+    <path
+        android:fillColor="#FFFFB300"
+        android:pathData="M282,118h12v12h-12z" />
+</vector>
