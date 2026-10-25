@@ -243,3 +243,34 @@ GitHub Actions 首次真实构建（`:app:testDebugUnitTest`）：**84 项中 14
 ### 验证方式
 
 云端 CI（84 项单测门禁 + 编译）+ 雷电模拟器实测（进入/退出单预览、比例三选项、键盘快捷键）。
+
+---
+
+## 10. 增量变更（2026-10-25 · 二轮反馈：单预览返回冻结整体修复 + 4 项新需求）
+
+来源：用户二轮反馈（上一轮 resume() 修复未覆盖真实根因 + 4 项交互需求）。
+变更 5 项，核心风险集中在 PlayerView surface 切换路径。
+
+| # | 类型 | 内容 | 涉及文件 |
+|---|---|---|---|
+| 1 | Bug 修复（根因级） | 单预览返回后画面冻结（用户观感=暂停）：attach 顺序改为"先挂新视图再摘旧视图"（对齐 media3 官方 `Util.switchTargetView` 模式）。旧代码先摘后挂，每次进出预览都走"清 surface → 解码器释放 → 重建"，在雷电模拟器/低端盒上重建挂起即冻结 | `playback/PlaybackSlot.kt`、`playback/QuadPlaybackManager.kt` |
+| 2 | Bug 修复（兜底） | surface 切换 stall 看门狗：挂载后 5s 未回 STATE_READY 且应播，自动释放并重建 player 恢复（8s 窗口 + 15s 冷却，避免与网络缓冲混淆） | `playback/PlaybackSlot.kt` |
+| 3 | 新功能 | 源管理页点击/确认已添加的源 = 进入编辑向导（原为测试播放；测试播放改由菜单键入口） | `ui/SourceManageFragment.kt` |
+| 4 | 新功能 | 预览 chrome 定时隐藏：左上角流信息（标题）+ 静音图标进入预览 3s 后消失（Info 键/静音键/切路复现 3s）；底部操作方式每次进入预览显示 5s 后消失 | `res/layout/activity_main.xml`、`ui/MainActivity.kt` |
+| 5 | 新功能 | 底部键盘操作提示（主界面常显两行：遥控 + 键盘）；设置页新增"开机自动启动"开关（BootReceiver 读取后拉起主界面） | `values/strings.xml`、`data/Models.kt`、`data/SettingsStore.kt`、`ui/SettingsFragment.kt`、`res/layout/fragment_settings.xml`、`BootReceiver.kt`、`AndroidManifest.xml` |
+
+### 根因分析（入库）
+
+- media3 `PlayerView.setPlayer(null)` → `ExoPlayer.clearVideoSurfaceView(holder)`：**身份守卫**（`surfaceHolder == this.surfaceHolder` 才清除）——先给新视图挂 player 再摘旧视图时，摘旧视图的 clear 命中守卫为空操作，**不释放解码器**；
+- SurfaceView surface 生命周期绑定视图可见性（API < 34）：overlay 隐藏即销毁 surface，故进入预览存在"等 surface 创建"窗口（既有行为，观感正常）；
+- 结论：surface 直切 + 身份守卫 = 不释放解码器； stall 看门狗 = 挂起场景 5s 内自愈。
+
+### 兼容性说明
+
+- `AppSettings.autoStart` 带默认值新增字段，SharedPreferences 缺键回退 false（默认关，不改变既有升级行为）；
+- 源列表点击语义变更（测试播放 → 编辑），测试播放仍可通过菜单键操作菜单进入；
+- 预览 chrome 自动隐藏不影响任何既有按键语义（Info/静音/切路均会复现 chrome）。
+
+### 验证方式
+
+云端 CI（单测门禁 + 编译 + 自动 Release b8）+ 待雷电模拟器实测（进入/退出单预览冻结复测、点击编辑、chrome 3s/5s 隐藏、开机启动开关）。
