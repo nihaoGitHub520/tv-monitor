@@ -67,7 +67,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           APK="tv-monitor-1.0.0-debug-b${{ github.run_number }}.apk"
-          mv app/build/outputs/apk/debug/app-debug.apk "$APK"
+          # download-artifact v4 会把产物放入以 artifact 名命名的子目录，用 find 兜底定位
+          SRC=$(find . -name "app-debug.apk" -type f | head -1)
+          if [ -z "$SRC" ]; then echo "::error::未找到 app-debug.apk，当前目录结构："; ls -R .; exit 1; fi
+          mv "$SRC" "$APK"
           # 同名 tag 先删后建，保持 Release 链接稳定（releases/tag/v1.0.0）
           gh release delete v1.0.0 --yes --cleanup-tag 2>/dev/null || true
           gh release create v1.0.0 "$APK" \
@@ -81,4 +84,4 @@ jobs:
           - 修复：退出单预览返回四分格后恢复播放（不再暂停）
           - 修复：返回后画面重新适配格位尺寸
           - 新增：播放比例选项（原比例 / 16:9 / 拉伸）
-          - 新增：键盘鼠标操作支持（Esc/Backspace 返回、1-4 选格、M 菜单、S 设置、空格暂停、滚轮切路/移焦点）"
+          - 新增：键盘鼠标操作支持（Esc/Del 返回、1-4 选格、M 菜单、S 设置、空格暂停、滚轮切路/移焦点）"
