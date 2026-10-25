@@ -219,3 +219,27 @@ GitHub Actions 首次真实构建（`:app:testDebugUnitTest`）：**84 项中 14
 ### 8.4 流程教训（入库）
 
 单测“通过”必须以**标准 AGP 单测环境（即 CI）**的运行为准；自建 classpath 的结果只能作为辅助参考，不能作为验收结论。
+
+---
+
+## 9. 增量变更（2026-10-25 · 模拟器实测反馈驱动）
+
+来源：用户雷电模拟器实测反馈 + 新需求。变更 5 项，业务风险集中在 attach/resize 与按键分发路径。
+
+| # | 类型 | 内容 | 涉及文件 |
+|---|---|---|---|
+| 1 | Bug 修复 | 退出单预览返回四分格后恢复播放（原：用户暂停态被带回四分格） | `ui/MainActivity.kt` |
+| 2 | Bug 修复 | 挂载视图时按源比例应用 resizeMode 并强制重新布局（原：返回小格画面不适配） | `playback/PlaybackSlot.kt` |
+| 3 | 新功能 | 播放比例选项：原比例 FIT / 16:9 ZOOM 裁切 / 拉伸 FILL，添加与编辑向导可选，按源持久化 | `data/Models.kt`、`ui/AddSourceWizardFragment.kt`、`res/layout/fragment_add_source.xml`、`values/strings.xml` |
+| 4 | 新功能 | 键盘鼠标支持：Esc/Backspace 返回、1-4 直达格位、M 菜单、S 设置、空格暂停、滚轮切路/移焦点 | `ui/MainActivity.kt` |
+| 5 | CI | main 分支构建成功后自动发布 GitHub Release（固定 tag v1.0.0） | `.github/workflows/build.yml` |
+
+### 兼容性说明
+
+- `VideoSource.aspectMode` 为带默认值新增字段，kotlinx.serialization 对缺失字段回退默认值，老 `sources.json` 前向兼容（表现为原比例）；
+- 键盘/滚轮分支均带场景判断（inPreview / inFragment），不影响遥控器既有语义；
+- Release job 仅在 `refs/heads/main` 触发，`permissions: contents: write` 仅作用于该 job。
+
+### 验证方式
+
+云端 CI（84 项单测门禁 + 编译）+ 雷电模拟器实测（进入/退出单预览、比例三选项、键盘快捷键）。

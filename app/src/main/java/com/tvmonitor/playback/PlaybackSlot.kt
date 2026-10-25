@@ -5,7 +5,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.tvmonitor.data.AspectMode
 import com.tvmonitor.data.PlaybackStats
 import com.tvmonitor.data.PlaybackStatus
 import com.tvmonitor.data.ReconnectConfig
@@ -174,6 +176,10 @@ class PlaybackSlot(
     /** 挂载视图（四分格 / 单预览）。player 为 null 时先缓存视图，起流后自动挂载。 */
     fun attachView(view: PlayerView) {
         attachedView = view
+        // 应用源的播放比例（2026-10-25：单预览与四分格共用同一 resizeMode 语义）
+        view.resizeMode = resizeModeFor(source?.aspectMode ?: AspectMode.FIT)
+        // surface 切换后强制重新布局，确保画面按当前视图尺寸重排（修复返回小格不适配）
+        view.requestLayout()
         view.player = player
     }
 
@@ -465,5 +471,12 @@ class PlaybackSlot(
     companion object {
         private const val TAG = "TvMonitor:PlaybackSlot"
         private const val STATS_INTERVAL_MS = 500L
+
+        /** 播放比例 → media3 resizeMode（原比例 FIT / 16:9 裁切 ZOOM / 拉伸 FILL）。 */
+        private fun resizeModeFor(mode: AspectMode): Int = when (mode) {
+            AspectMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+            AspectMode.RATIO_16_9 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+        }
     }
 }

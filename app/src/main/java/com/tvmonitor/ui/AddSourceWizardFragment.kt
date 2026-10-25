@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tvmonitor.R
 import com.tvmonitor.TvMonitorApp
+import com.tvmonitor.data.AspectMode
 import com.tvmonitor.data.CredentialCrypto
 import com.tvmonitor.data.JsonSourceStore
 import com.tvmonitor.data.M3uParseReport
@@ -298,6 +299,14 @@ class AddSourceWizardFragment : Fragment() {
     private fun prefillForEdit(source: VideoSource) {
         selectedType = source.type
         binding.etName.setText(source.name)
+        // 播放比例回显
+        binding.rgAspect.check(
+            when (source.aspectMode) {
+                AspectMode.FIT -> R.id.rb_aspect_fit
+                AspectMode.RATIO_16_9 -> R.id.rb_aspect_16_9
+                AspectMode.FILL -> R.id.rb_aspect_fill
+            },
+        )
         when (source.type) {
             SourceType.ONVIF -> {
                 binding.etIp.setText(source.onvifIp)
@@ -519,12 +528,14 @@ class AddSourceWizardFragment : Fragment() {
                     name = name,
                     type = SourceType.STREAM,
                     address = binding.etAddress.text.toString().trim(),
+                    aspectMode = selectedAspectMode(),
                 )
                 SourceType.M3U8 -> VideoSource(
                     id = existing?.id ?: "",
                     name = name,
                     type = SourceType.M3U8,
                     address = binding.etUrl.text.toString().trim(),
+                    aspectMode = selectedAspectMode(),
                 )
                 SourceType.FILE -> VideoSource(
                     id = existing?.id ?: "",
@@ -532,6 +543,7 @@ class AddSourceWizardFragment : Fragment() {
                     type = SourceType.FILE,
                     address = (pickedFileUri ?: existing?.address?.let { Uri.parse(it) })?.toString()
                         ?: "",
+                    aspectMode = selectedAspectMode(),
                 )
             }
 
@@ -600,8 +612,17 @@ class AddSourceWizardFragment : Fragment() {
             onvifPort = binding.etPort.text.toString().trim().toIntOrNull() ?: 80,
             deviceVendor = deviceInfo?.vendor ?: existing?.deviceVendor ?: "",
             deviceModel = deviceInfo?.model ?: existing?.deviceModel ?: "",
+            aspectMode = selectedAspectMode(),
         )
     }
+
+    /** 当前选中的播放比例（默认原比例）。 */
+    private fun selectedAspectMode(): AspectMode =
+        when (binding.rgAspect.checkedRadioButtonId) {
+            R.id.rb_aspect_16_9 -> AspectMode.RATIO_16_9
+            R.id.rb_aspect_fill -> AspectMode.FILL
+            else -> AspectMode.FIT
+        }
 
     private fun selectedSlotIndex(): Int? {
         val id = binding.rgSlots.checkedRadioButtonId

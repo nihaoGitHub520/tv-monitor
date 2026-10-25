@@ -47,3 +47,38 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: 发布 GitHub Release
+    needs: build
+    # 仅 main 分支构建发布；功能分支只跑测试与编译
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 允许 GITHUB_TOKEN 创建/删除 Release
+    steps:
+      - name: 下载 APK 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: tv-monitor-apk
+
+      - name: 创建/更新 Release（固定 tag v1.0.0，始终指向最新构建）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK="tv-monitor-1.0.0-debug-b${{ github.run_number }}.apk"
+          mv app/build/outputs/apk/debug/app-debug.apk "$APK"
+          # 同名 tag 先删后建，保持 Release 链接稳定（releases/tag/v1.0.0）
+          gh release delete v1.0.0 --yes --cleanup-tag 2>/dev/null || true
+          gh release create v1.0.0 "$APK" \
+            --title "tv-monitor v1.0.0 · build ${{ github.run_number }}" \
+            --notes "自动构建发布（commit ${GITHUB_SHA::7}）。
+
+          ### 安装
+          U 盘拷贝 APK 到电视/盒子 → 允许未知来源 → 安装。
+
+          ### 本次变更
+          - 修复：退出单预览返回四分格后恢复播放（不再暂停）
+          - 修复：返回后画面重新适配格位尺寸
+          - 新增：播放比例选项（原比例 / 16:9 / 拉伸）
+          - 新增：键盘鼠标操作支持（Esc/Backspace 返回、1-4 选格、M 菜单、S 设置、空格暂停、滚轮切路/移焦点）"

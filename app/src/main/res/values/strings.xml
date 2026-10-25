@@ -103,6 +103,12 @@
     <string name="wizard_step_m3u8">M3U8 直播链接</string>
     <string name="wizard_step_file">本地视频文件</string>
     <string name="wizard_step_finish">命名与格位绑定</string>
+
+    <!-- ==================== 播放比例（2026-10-25） ==================== -->
+    <string name="wizard_aspect_title">播放比例</string>
+    <string name="aspect_fit">原比例（留黑边）</string>
+    <string name="aspect_16_9">16:9（裁切填满）</string>
+    <string name="aspect_fill">拉伸（填满）</string>
     <string name="action_next">下一步</string>
     <string name="action_prev">上一步</string>
     <string name="action_save">保存</string>

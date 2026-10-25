@@ -6,7 +6,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageButton
@@ -21,6 +23,7 @@ import com.tvmonitor.R
 import com.tvmonitor.data.JsonSourceStore
 import com.tvmonitor.data.PlaybackStats
 import com.tvmonitor.data.PlaybackStatus
+import com.tvmonitor.data.QuadLayoutState
 import com.tvmonitor.data.SettingsStore
 import com.tvmonitor.databinding.ActivityMainBinding
 import com.tvmonitor.playback.QuadPlaybackManager
@@ -179,25 +182,54 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
 
+            // ---- 键盘鼠标扩展（2026-10-25）：模拟器 / 键鼠环境 ----
+            // Esc / Backspace = 返回（键盘无 BACK 键时的等价键）
+            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BACKSPACE -> {
+                handleBack()
+                return true
+            }
+
             KeyEvent.KEYCODE_MENU -> {
-                when {
-                    inPreview -> Unit // 单预览无菜单语义（沉浸观看）
-                    inFragment -> {
-                        // 转发给当前 Fragment（源管理等列表页的上下文菜单）
-                        val handler = supportFragmentManager.fragments
-                            .lastOrNull { it is MenuKeyHandler } as? MenuKeyHandler
-                        if (handler?.onMenuKey() == true) return true
-                    }
-                    else -> {
-                        openSourceManage()
-                        return true
-                    }
-                }
+                if (handleMenuKey()) return true
+            }
+
+            // M = 菜单（键盘直接打开源管理）
+            KeyEvent.KEYCODE_M -> {
+                if (!inPreview && handleMenuKey()) return true
             }
 
             KeyEvent.KEYCODE_SETTINGS -> {
                 if (!inPreview && !inFragment) {
                     openSettings()
+                    return true
+                }
+            }
+
+            // S = 设置（键盘快捷键）
+            KeyEvent.KEYCODE_S -> {
+                if (!inPreview && !inFragment) {
+                    openSettings()
+                    return true
+                }
+            }
+
+            // 1~4 = 直达对应格：聚焦 + 有源即进单预览（快速监看某一路）
+            KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_2,
+            KeyEvent.KEYCODE_3, KeyEvent.KEYCODE_4 -> {
+                if (!inPreview && !inFragment) {
+                    val index = event.keyCode - KeyEvent.KEYCODE_1
+                    binding.quadGrid.focusSlot(index)
+                    if (playbackManager.slotStates[index].value.source != null) {
+                        enterSinglePreview(index)
+                    }
+                    return true
+                }
+            }
+
+            // 空格 / 播放暂停键 = 单预览内播放暂停
+            KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                if (inPreview) {
+                    togglePlayPause()
                     return true
                 }
             }
@@ -247,6 +279,70 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    /**
+     * 菜单键语义（MENU 键与键盘 M 共用）。
+     * @return true=已消费；false=未处理（调用方落回 super 分发）。
+     */
+    private fun handleMenuKey(): Boolean {
+        val inPreview = playbackManager.isSinglePreview()
+        val inFragment = supportFragmentManager.backStackEntryCount > 0
+        return when {
+            // 单预览无菜单语义（沉浸观看）
+            inPreview -> false
+            inFragment -> {
+                // 转发给当前 Fragment（源管理等列表页的上下文菜单）
+                val handler = supportFragmentManager.fragments
+                    .lastOrNull { it is MenuKeyHandler } as? MenuKeyHandler
+                handler?.onMenuKey() == true
+            }
+            else -> {
+                openSourceManage()
+                true
+            }
+        }
+    }
+
+    // ===================== 鼠标滚轮（模拟器 / 键鼠环境） =====================
+
+    /**
+     * 鼠标滚轮映射：
+     * - 单预览态：滚轮 = 上/下一路切换；
+     * - 四分格态：滚轮 = 焦点格上/下移动（2x2，越界不动）；
+     * - Fragment 态：透传（列表滚动由系统焦点导航处理）。
+     */
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_SCROLL &&
+            event.isFromSource(InputDevice.SOURCE_CLASS_POINTER)
+        ) {
+            val vScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+            if (vScroll != 0f) {
+                val forward = vScroll < 0 // 向下滚 = 下一个
+                when {
+                    playbackManager.isSinglePreview() -> {
+                        playbackManager.switchSinglePreview(
+                            if (forward) 1 else -1,
+                            binding.singlePreviewPlayer,
+                        )
+                        refreshPreviewOverlay()
+                        return true
+                    }
+
+                    supportFragmentManager.backStackEntryCount == 0 -> {
+                        val current = binding.quadGrid.focusedSlotIndex()
+                        if (current != null) {
+                            val target = current + if (forward) 2 else -2
+                            if (target in 0 until QuadLayoutState.SLOT_COUNT) {
+                                binding.quadGrid.focusSlot(target)
+                            }
+                        }
+                        return true
+                    }
+                }
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
     /** 返回键语义：单预览→四分格；Fragment→回退；主界面→退出确认。 */
     private fun handleBack() {
         when {
@@ -277,8 +373,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun exitSinglePreview() {
+        val index = playbackManager.previewIndex()
         playbackManager.exitSinglePreview()
         overlay.hide()
+        // 返回四分格 = 恢复实时监看：单预览内的用户暂停不带回四分格
+        // （2026-10-25 用户反馈：放大再返回后画面暂停）
+        index?.let { playbackManager.slots[it].resume() }
         refreshQuadMuteIcons()
         TvLog.i(TAG, "返回四分格")
     }

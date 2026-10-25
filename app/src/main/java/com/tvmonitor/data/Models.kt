@@ -28,6 +28,22 @@ enum class StreamKind {
 }
 
 /**
+ * 播放比例（视频画面在格位/单预览中的缩放方式，2026-10-25 用户需求）。
+ *
+ * 映射到 media3 PlayerView 的 resizeMode：
+ * - [FIT] 原比例：保持视频宽高比，容器留黑边（RESIZE_MODE_FIT）；
+ * - [RATIO_16_9] 16:9：等比裁切填满容器，无黑边不变形（RESIZE_MODE_ZOOM，
+ *   监控格子场景的常用观感）；
+ * - [FILL] 拉伸：填满容器，可能变形（RESIZE_MODE_FILL）。
+ */
+@Serializable
+enum class AspectMode {
+    FIT,
+    RATIO_16_9,
+    FILL,
+}
+
+/**
  * 视频源实体（持久化于 `files/sources.json`）。
  *
  * 安全约定：密码不明文落盘。[passwordEnc] 为 [CredentialCrypto] 加密结果，
@@ -36,6 +52,7 @@ enum class StreamKind {
  * @property id 源唯一标识（UUID），格位绑定引用此字段；
  * @property address 播放地址：ONVIF 为码流 URI，STREAM/M3U8 为直链，FILE 为 content:// 或 file://；
  * @property preferSubStream ONVIF 添加时是否优先选子码流（主理人裁决 4）；
+ * @property aspectMode 播放比例（默认原比例；老数据缺字段反序列化为默认值，前向兼容）；
  * @property profileToken ONVIF 媒体配置 token，编辑重取流时使用；
  * @property createdAt / updatedAt epoch 毫秒。
  */
@@ -48,6 +65,7 @@ data class VideoSource(
     val username: String = "",
     val passwordEnc: String = "",
     val preferSubStream: Boolean = true,
+    val aspectMode: AspectMode = AspectMode.FIT,
     val profileToken: String = "",
     val streamKind: StreamKind = StreamKind.SUB,
     val onvifIp: String = "",
