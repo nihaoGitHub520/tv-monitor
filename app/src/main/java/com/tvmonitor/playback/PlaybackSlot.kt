@@ -258,7 +258,12 @@ class PlaybackSlot(
         val src = source ?: return
         scope.launch {
             when (val result = resolver.resolve(src)) {
-                is AppResult.Failure -> handleResolveFailure(result.error)
+                is AppResult.Failure ->
+                    // 与成功分支对称的绑定时效守卫（2026-10-25 二轮修复）：
+                    // 解析在途时已换绑/解绑则丢弃本次失败，避免对新源产生
+                    // 无谓的重连计数/倒计时噪声
+                    if (source === src) handleResolveFailure(result.error)
+
                 is AppResult.Success -> withContext(Dispatchers.Main) {
                     // 绑定竞态防护（2026-10-25 双播放器架构）：解析在途时若已退出
                     // 单预览 / 连续切路（bind 换了源或置空），丢弃本次解析结果——

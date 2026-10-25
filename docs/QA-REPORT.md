@@ -326,3 +326,33 @@ media3 维护者在 #1433 的官方建议原话："You can use two different sur
 - **回归**：进/出/切路（左右键，日志 `单预览切路：1 -> 3`）、预览内静音（Toast + 图标）、播放暂停（标题"（已暂停）"）、返回后静音图标同步、预览错误态（死链显示"网络中断，X 秒后第 N 次重试"倒计时，info 面板统计取预览 player）均正常；
 - **源管理页点击编辑入口**：与 b8 做 A/B（同序列 M → tap 行1 / D-pad），行为字节级一致——模拟器 `input tap` 不触发行点击、D-pad 焦点穿透到四分格均为 b8 既有表现，非本次回归；
 - **已知遗留**：预览期间该路带宽/解码 x2；预览起播比热切换多 1-2s 缓冲（HLS）；测试源（cctv9hd/cztv）本身间歇性不可用，实测窗口需避开上游停滞期。
+
+---
+
+## 12. 增量变更（2026-10-25 · 四轮反馈：b10 双播放器实测 FAIL——SurfaceView 图层生命周期触发模拟器合成器异常）
+
+来源：QA 独立实测判定 b10 FAIL——主验收不过，且出现比原 bug 更严重的新症状（非预览格串台）。3 次独立复现，已排除上游流停顿与测试方法问题（探针法证明两路源当时均活）。
+
+### 12.1 QA 失败现象与鉴别（采信）
+
+- **现象**：单预览中预览 player **已渲染画面后**退出 → ①该格冻结；②**非预览格串显被预览流的内容**（预览 slot0 后 slot1 格显示 CCTV9 内容；预览 slot1 后 slot0 格显示浙江卫视内容）；③连 player 重建（新 codec + 新 surface generation）都不恢复；
+- **日志**：退出后四分格 player 仍在正常重连/起流（`slot=1 起流`、`slot=0 第 1 次重连`）——**player 活着，但 player→瓷砖的画面链路被永久破坏**；
+- **相关性**：预览未渲染时退出（黑屏退出 / 死链预览）瓷砖不受影响；**预览已渲染时退出必冻**；
+- **对照实验**：源管理 Fragment（全屏 overlay 但无 SurfaceView）开关后两格照常播放 → 冻结**专属于单预览 PlayerView/SurfaceView 生命周期**。
+
+### 12.2 二轮根因
+
+预览 overlay 的 SurfaceView 图层"**创建 → 收到帧 → 销毁**"这套生命周期触发了雷电模拟器合成器的异常（每格 SurfaceView 是独立 SurfaceFlinger 图层；app 启动日志即有 `duplicate layer name` 告警，模拟器对同名图层的增删处理可疑）。四分格 SurfaceView 图层自 inflate 起稳定不变本无事，是预览图层的建立 + 收帧 + 销毁把其它图层的呈现带崩。b8 时代该图层也在，但被"热切换冻结"掩盖，且退出时格位 player 重新 attach 恰好把该格 surface 重建了，所以没观察到串台。
+
+### 12.3 修复方案
+
+| # | 文件 | 改动要点 |
+|---|---|---|
+| 1 | `res/layout/activity_main.xml` | `single_preview_player` 的 `surface_type` 由 `surface_view` 改 **`texture_view`**：TextureView 在 app 窗口内合成，不产生独立 SurfaceFlinger 图层；预览 surface 的建立/销毁完全不碰图层栈，四分格 SurfaceView 图层不受扰动。布局内已加警示注释防回改 |
+| 2 | `res/layout/activity_main.xml` | `single_preview_title` maxWidth 360dp → 560dp（重连倒计时"网络中断，X 秒后第 N 次重试"原先被截断） |
+| 3 | `res/layout/activity_main.xml` | `single_preview_player` 的 `keep_content_on_player_reset` true → false：死链预览 / 切路不再显示上一路残留帧（误导用户以为旧内容还在播），改为加载 / 错误态黑 shutter。代价：切路 ~0.5-2s 黑屏，属正常视频 UX |
+| 4 | `playback/PlaybackSlot.kt` | `prepareMedia` 失败分支补 `source === src` 守卫，与成功分支对称：解析在途时已换绑 / 解绑则丢弃本次失败，避免对新源产生无谓的重连计数 / 倒计时噪声 |
+
+### 12.4 验证结论
+
+（待模拟器实测后补）

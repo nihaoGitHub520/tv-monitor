@@ -63,14 +63,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!--
+          预览播放器：必须用 texture_view，不要改回 surface_view！
+          背景（2026-10-25 二轮修复）：预览 SurfaceView 是独立 SurfaceFlinger 图层，
+          其"创建→收到帧→销毁"生命周期会触发雷电模拟器合成器异常，把四分格各
+          SurfaceView 图层的呈现带崩（返回后该格冻结 + 非预览格串显被预览流内容，
+          QA 三次独立复现，见 QA-REPORT §12）。TextureView 在 app 窗口内合成，
+          不产生独立图层，预览 surface 的建立/销毁完全不碰图层栈。
+        -->
         <androidx.media3.ui.PlayerView
             android:id="@+id/single_preview_player"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            app:keep_content_on_player_reset="true"
+            app:keep_content_on_player_reset="false"
             app:resize_mode="fit"
             app:shutter_background_color="@color/black"
-            app:surface_type="surface_view"
+            app:surface_type="texture_view"
             app:use_controller="false" />
 
         <!-- 左上角 chrome：标题 + 静音 + 信息 overlay（进入预览显示，3s 自动隐藏；Info 键唤出统计再显 3s） -->
@@ -95,7 +103,7 @@
                     android:background="@drawable/badge_background"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:maxWidth="360dp"
+                    android:maxWidth="560dp"
                     android:paddingStart="12dp"
                     android:paddingTop="6dp"
                     android:paddingEnd="12dp"
