@@ -13,3 +13,6 @@ local.properties
 keystore/
 *.jks
 *.keystore
+# 例外：固定 debug 签名 keystore 必须入库，保证 CI 各包签名一致可覆盖升级
+# （标准 debug 凭据 android/androiddebugkey，仅用于 debug 分发；release 签名另行保密管理）
+!app/debug.keystore

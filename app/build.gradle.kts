@@ -23,10 +23,22 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        // 固定 debug 签名：keystore 入库，保证 CI 每次构建签名一致，可直接覆盖安装
+        // （否则 CI runner 随机生成 keystore，各包签名不同，升级必报 INSTALL_FAILED_UPDATE_INCOMPATIBLE）
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false
