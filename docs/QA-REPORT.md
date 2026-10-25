@@ -189,3 +189,33 @@
 ---
 
 *附：QA 本地验证工具链（kotlinc 2.0.21 CLI + API 35 编译期 jar + AGP mockable jar 语义复现 + 86 依赖 jar）位于 `qa-harness/`，可复跑 `run_tests.sh`（当前仓库）/ `run_tests_subset.sh`（子集）/ `run_tests_verify.sh`（+N1/N3/N4 修复副本）重现本报告全部结论。*
+
+---
+
+## 8. CI 实录（2026-10-25 · GitHub Actions 云构建）
+
+**第 3 轮：CI 首跑不通过 → 定位修复 → 待 CI 复验。**
+
+### 8.1 失败现象
+
+GitHub Actions 首次真实构建（`:app:testDebugUnitTest`）：**84 项中 14 项失败**，全部集中于 `OnvifSoapTest` 的解析类用例（parseFault / parseDeviceInfo / parseProfiles / parseStreamUri / parseMediaServiceEndpoint），报错均为 `java.lang.RuntimeException`（Android Stub 症状）。不走解析器的用例（信封构建、摘要计算、Probe 报文）全部通过。
+
+### 8.2 根因（环境差异，非业务代码缺陷）
+
+- AGP 单元测试的 classpath 使用 **mockable android.jar**，其中 `org.xmlpull.v1.XmlPullParserFactory.newInstance()` 方法体为 Stub，直调抛 `RuntimeException: Stub!`；
+- 本报告第 2 轮的“84/84 通过”运行在 QA 自建 classpath（**Robolectric android-all.jar 提供真实 Android 实现**）之上，与 AGP 标准单测环境不一致——**测试结论未在标准 CI 环境验证过**，这是流程缺口；
+- 项目已为 `android.util.Base64` / `android.net.Uri` 提供测试源码替身，但 `org.xmlpull.v1` 解析器无法简单替身，属覆盖盲区。
+
+### 8.3 修复内容（3 个文件，业务代码零改动）
+
+| 文件 | 改动 |
+|---|---|
+| `gradle/libs.versions.toml` | 新增 `robolectric = 4.14.1` 及库条目 |
+| `app/build.gradle.kts` | `testImplementation(libs.robolectric)`；`testOptions` 开启 FULL 堆栈输出（CI 日志可读性） |
+| `app/src/test/.../OnvifSoapTest.kt` | 类级 `@RunWith(RobolectricTestRunner::class)` |
+
+修复后 CI 测试环境与 QA 本地环境对齐（均由 android-all 提供 org.xmlpull 实现）。**待 CI 复验通过后本节标记 PASS。**
+
+### 8.4 流程教训（入库）
+
+单测“通过”必须以**标准 AGP 单测环境（即 CI）**的运行为准；自建 classpath 的结果只能作为辅助参考，不能作为验收结论。

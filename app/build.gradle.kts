@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 plugins {
     alias(libs.plugins.android.application)
@@ -60,6 +61,13 @@ android {
         // 编译期 lint 不阻塞交付（CI 侧另行配置）
         abortOnError = false
     }
+
+    testOptions {
+        // CI 日志输出完整堆栈，便于定位失败测试（2026-10-25 OnvifSoapTest 14 项失败排查经验）
+        unitTests.all {
+            it.testLogging.exceptionFormat = TestExceptionFormat.FULL
+        }
+    }
 }
 
 dependencies {
@@ -90,4 +98,8 @@ dependencies {
 
     // ---- 测试（QA 负责编写） ----
     testImplementation(libs.junit)
+    // Robolectric：为 JVM 单测提供真实 Android 实现（org.xmlpull.v1 / android.util.Base64 等）。
+    // 背景：android.jar 在 JVM 单测中方法体均为 Stub，XmlPullParserFactory.newInstance() 抛
+    // RuntimeException("Stub!")，导致 OnvifSoapTest 14 项解析用例失败（2026-10-25 CI 实录）。
+    testImplementation(libs.robolectric)
 }

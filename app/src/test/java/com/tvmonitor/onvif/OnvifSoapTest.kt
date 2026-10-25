@@ -11,6 +11,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * [OnvifSoap] 单元测试（T2 验收 / ARCHITECTURE §7）。
@@ -24,8 +26,11 @@ import org.junit.Test
  * 4. WS-Discovery Probe 报文结构。
  *
  * 环境说明：`android.util.Base64` 在 JVM 单测中由测试源码替身
- * （app/src/test/java/android/util/Base64.kt）提供，与 Android 语义一致。
+ * （app/src/test/java/android/util/Base64.kt）提供，与 Android 语义一致；
+ * `org.xmlpull.v1.XmlPullParserFactory` 依赖 Robolectric 提供的真实 Android 实现
+ * （android.jar 在 JVM 单测中为 Stub，直调会抛 RuntimeException，见 build.gradle.kts 注释）。
  */
+@RunWith(RobolectricTestRunner::class)
 class OnvifSoapTest {
 
     @Before
