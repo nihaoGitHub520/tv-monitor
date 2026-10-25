@@ -183,8 +183,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             // ---- 键盘鼠标扩展（2026-10-25）：模拟器 / 键鼠环境 ----
-            // Esc / Backspace = 返回（键盘无 BACK 键时的等价键）
-            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BACKSPACE -> {
+            // Esc / Del(退格) = 返回（键盘无 BACK 键时的等价键；注意 Android 退格键常量为 KEYCODE_DEL）
+            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_DEL -> {
                 handleBack()
                 return true
             }
