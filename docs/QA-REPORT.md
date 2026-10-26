@@ -379,3 +379,40 @@ media3 维护者在 #1433 的官方建议原话："You can use two different sur
 - 历史佐证：b10（旧架构）一轮验收期同样出现过无预览参与的四分格静态帧，经 A/B 对照 + manifest 探针归因同一 CDN live edge 冻结——该上游停滞现象与本次架构改动无关。
 
 **遗留项（如实申报）**：stall 看门狗只覆盖"首帧超时"，不覆盖"播放中上游停供"的 mid-stream 冻结（slot1 静默冻结 10 分钟无重连动作）——既有设计，非本轮引入；如需增强（如基于渲染帧间隔的二次看门狗）可另立需求。
+
+---
+
+## 13. 增量变更（2026-10-26 · 三轮反馈：源管理交互 + 界面清理 4 项）
+
+来源：用户三轮反馈（b12 交付后）：①源管理列表显示通道号、点击多次才进编辑；②四分格底部提示取消、提示移入退出框；③四分格源标题不显示；④单预览比例不一致时透出四分格画面。
+
+| # | 类型 | 内容 | 涉及文件 |
+|---|------|------|----------|
+| 1 | Bug 修复（根因级） | 源管理"点很多下才进编辑"：行布局移除 `focusableInTouchMode`。AOSP `View.onTouchEvent` ACTION_UP：`focusTaken = isFocusable() && isFocusableInTouchMode() && !isFocused(); if (!focusTaken) performClick();`——未聚焦行首次点击只抢焦点不触发点击，每行都要点两次 | `res/layout/item_source.xml` |
+| 2 | Bug 修复（加固） | 点击改用 bind 时固化的源引用，不再依赖 `bindingAdapterPosition`（适配器刷新窗口内为 NO_POSITION，`getOrNull(-1)` 静默丢失点击）；状态点仅在变化时刷新（消除 500ms 无条件 `notifyDataSetChanged` 的点击丢失窗口） | `ui/SourceManageFragment.kt` |
+| 3 | 新功能 | 源列表显示通道号（绑定格位 1~4 / 未绑定），订阅 `layoutState` Flow | `ui/SourceManageFragment.kt`、`res/layout/item_source.xml`、`values/strings.xml` |
+| 4 | 新功能 | 源管理进入页面聚焦首行（一次性守卫）：修复菜单键上下文菜单无效（focusedChild 恒为 null）、D-pad 焦点穿透到四分格、确认键编辑入口缺失 | `ui/SourceManageFragment.kt` |
+| 5 | UI 变更 | 四分格底部常显提示条取消（`hint_bar` 移除，QuadGridView 铺满全屏，底部不留黑）；操作提示并入退出确认对话框 | `res/layout/activity_main.xml`、`ui/MainActivity.kt`、`values/strings.xml` |
+| 6 | UI 变更 | 四分格槽位源名标题移除（保留状态点/静音图标） | `res/layout/view_slot.xml`、`ui/SlotView.kt` |
+| 7 | Bug 修复 | 单预览 fit 黑边透出四分格：TextureView 黑边区透明，overlay 根与 PlayerView 原无背景。改双不透明黑底（根 + PlayerView） | `res/layout/activity_main.xml` |
+
+### 根因分析（入库）
+
+- **focusTaken 机制**（item 1）：`focusableInTouchMode="true"` + 未聚焦 → 首次点击 `requestFocus()` 后 `performClick()` 被跳过。这是 TV/列表场景经典坑；按钮不设该属性所以一次即灵。移除后首次点击即触发；`focusable="true"` 保留，D-pad/遥控焦点不受影响。实测：b14 起 `input tap`/`input mouse tap` 一次点击即打开编辑向导且地址预填（b12 及以前同坐标多次点击无响应）。
+- **黑边透出机制**（item 7）：TextureView 只绘制视频纹理区域；`resize_mode=fit` 时 AspectRatioFrameLayout 按视频宽高比收缩内容帧，PlayerView 其余区域无背景即透明，透出底层四分格。加载期（首帧前）同样透出。修复：overlay 根与 PlayerView 均设 `@color/black` 双保险。
+- 点击加固（item 2）：`notifyDataSetChanged()` 后至下次布局前 `bindingAdapterPosition` 返回 NO_POSITION；500ms 状态轮询刷新使该窗口反复出现，是"点了没反应"的次要诱因。
+
+### 兼容性说明
+
+- `main_hint_bar` 字符串删除（底部提示条移除），操作提示内容移入 `exit_confirm_hints`；
+- 源列表行、四分格槽位移除 `focusableInTouchMode`：触摸/鼠标首次点击即触发（原需两次）；D-pad 焦点语义不变；
+- 通道号读既有 `SlotBinding`，无数据模型变更、无迁移。
+
+### 验证方式（雷电模拟器，b14/b15 实测）
+
+- 四分格主界面：底部无提示条、无黑条、铺满全屏；槽位无源名标题（仅状态点+静音图标）；
+- 退出对话框：显示"遥控 + 键盘"两行操作提示；
+- 源管理：通道号徽标（通道1~4）与绑定一致；**一次点击（touch/mouse 源均验）即开编辑向导且地址预填**；
+- 单预览：加载期纯黑无透出（原透出四分格），起流后全屏；
+- 回归：Esc 返回后各格持续播放（4s 间隔双帧对比），日志 `退出单预览，恢复四分格（slot=0 全程未触碰）`；
+- 待验证（b16）：源管理首行聚焦 + 菜单键上下文菜单 + D-pad 行导航。
