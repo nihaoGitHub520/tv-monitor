@@ -5,9 +5,9 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -83,6 +83,14 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
      */
     private var firstRowFocusPending = true
 
+    /**
+     * 首行聚焦用的全局布局监听（2026-10-26 晚 b21→b22 修复）。
+     * 见 onViewCreated 内 sources 观察者：用 OnGlobalLayoutListener 重试拿首行 ViewHolder，
+     * 避免 doOnLayout/OnLayoutChangeListener “已布局即立即执行、holder 为 null 后不再触发”
+     * 的卡死。onDestroyView 时若仍未触发则移除，防泄漏。
+     */
+    private var rowFocusGlobalListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -119,22 +127,28 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             // 菜单键上下文菜单（测试播放/编辑/删除/绑定）无效；D-pad 焦点易穿透到
             // 四分格；确认键编辑入口只剩鼠标点击一条路。聚焦首行后三条路都通。
             if (sources.isNotEmpty() && firstRowFocusPending) {
-                // b20→b21 修复要点：
-                // 1. 首行聚焦用 doOnLayout——首次进入页面时 rv 尚未布局，doOnLayout 在“首次
-                //    布局完成后”回调，此时首行 ViewHolder 已就绪（b20 实测 doOnLayout 能可靠
-                //    把焦点设到 row0；更早的 post{} 写法在布局前执行会拿到 null）。
-                // 2. 真正的焦点丢失根因：随后 setChannels/refreshStatus 的 notifyDataSetChanged
-                //    把聚焦行 detach 重建，焦点回落到底层四分格 slot_0（uiautomator dump 实证）。
-                //    已把两处刷新改为 notifyItemRangeChanged（保留 ViewHolder 实例，焦点不丢），
-                //    配合此处一次性聚焦，菜单键/D-pad/确认键三条交互路径才真正通畅。
+                // b21→b22 修复要点（b21 仍翻车，uiautomator dump 焦点仍是 slot_0）：
+                // doOnLayout/OnLayoutChangeListener 在“rv 已布局后才触发观察者”的场景下会
+                // 立即执行，此时 submitList 的子项尚未随重布局出现，findViewHolderForAdapterPosition(0)
+                // 返回 null，一次性监听随后移除，首行永远聚焦不上（默认焦点落到四分格 slot_0）。
+                // 改用 OnGlobalLayoutListener 重试：每次全局布局后查首行，拿到即聚焦并撤监听；
+                // 拿不到（子项未布局）则等下一次全局布局，直到成功——彻底消除上述竞态。
+                // 配合 setChannels/refreshStatus 改 notifyItemRangeChanged（保留 ViewHolder 实例），
+                // 聚焦后不再被刷新打断，菜单键/D-pad/确认键三条交互路径才真正通畅。
                 val rv = binding.rvSources
-                rv.doOnLayout {
-                    val holder = rv.findViewHolderForAdapterPosition(0)
-                    if (holder != null && firstRowFocusPending) {
-                        holder.itemView.requestFocus()
-                        firstRowFocusPending = false
+                val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
+                    override fun onGlobalLayout() {
+                        val holder = rv.findViewHolderForAdapterPosition(0) ?: return
+                        rv.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        rowFocusGlobalListener = null
+                        if (firstRowFocusPending) {
+                            holder.itemView.requestFocus()
+                            firstRowFocusPending = false
+                        }
                     }
                 }
+                rowFocusGlobalListener = listener
+                rv.viewTreeObserver.addOnGlobalLayoutListener(listener)
             }
         }
         observeSlotStates()
@@ -172,6 +186,9 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
     }
 
     override fun onDestroyView() {
+        // 移除可能尚未触发的首行聚焦监听，防泄漏
+        rowFocusGlobalListener?.let { _binding?.rvSources?.viewTreeObserver?.removeOnGlobalLayoutListener(it) }
+        rowFocusGlobalListener = null
         // 重置首行聚焦待办：下次进入本页（视图重建）重新聚焦首行
         firstRowFocusPending = true
         _binding = null
