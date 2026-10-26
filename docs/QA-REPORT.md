@@ -434,23 +434,26 @@ media3 维护者在 #1433 的官方建议原话："You can use two different sur
   2. "docs-only 提交也失败 ⇒ 环境问题"的推断只有在 docs 提交**不包含坏代码**时才成立，应先 git log 确认代码基线；
   3. step 时长异常（105s vs 5:11）本身就是信号：失败发生在编译期而非测试期，被步骤名"运行单元测试"掩盖。
 
-## 14. b20→b21：源管理首行聚焦被刷新打断（焦点保焦修复）
+## 14. 源管理首行聚焦与刷新保焦（b23 / commit 5d5b808 实测通过）
 
-### 现象（b20 实测，uiautomator dump 实证）
-- 进入源管理页，首行聚焦"看似成功"（焦点先到 row0），但 immediately 后焦点回落到底层四分格 `slot_0`。
-- 后果：菜单键上下文菜单（测试播放/编辑/删除/绑定）无效（依赖 `rvSources.focusedChild`）；D-pad 导航穿透到四分格；确认键编辑入口只剩鼠标点击。三条交互路径全部失效。
+### 真实问题
+- 进入源管理页时 `onViewCreated` 里执行 `binding.btnAdd.requestFocus()`，焦点停在「添加源」按钮上，`rvSources.focusedChild` 恒为 null。
+- 后果：菜单键处理 `onMenuKey()` 需要 `rvSources.focusedChild`，取不到就返回 false → **上下文菜单（测试播放/编辑/删除/绑定）一直无效**；D-pad 行导航体验差；确认键编辑入口只剩鼠标点击一条路。
 
-### 根因（比"点很多下"更深一层）
-- `setChannels()`（绑定/解绑触发）与 `refreshStatus()`（每 500ms 状态轮询触发）原本调用 `notifyDataSetChanged()`。
-- `notifyDataSetChanged` 会**把已聚焦的行 detach 再重建 ViewHolder**，焦点随之丢失，回落到布局中下一个可聚焦视图（四分格 slot_0，因为它在 Fragment 下层）。
-- b14/b15 的"点很多下"是 focusTaken（点击只抢焦点）；b20 是刷新打断焦点——两者都指向"源管理页焦点不稳定"，但机制不同。
+### 修复（两处配合，缺一不可）
+1. **首行自动聚焦**：`sources` 观察者里用 `OnGlobalLayoutListener` **重试**拿首行 ViewHolder——每次全局布局后查 `findViewHolderForAdapterPosition(0)`，拿到即 `requestFocus()` 并撤监听，拿不到（子项尚未随 submitList 重布局）就等下一次全局布局。
+   - 为什么不用 `doOnLayout` / `OnLayoutChangeListener`：若 `sources` 观察者在 `rv` **已布局之后**才触发，两者会「立即执行」，此时子项还没随重布局出现，holder 为 null，一次性监听随即移除 → 首行永远聚焦不上。`OnGlobalLayoutListener` 重试彻底消除该竞态。
+2. **刷新保焦点**：`submitList` 改 `DiffUtil.calculateDiff` 增量更新（`VideoSource` 是 `data class`，结构性相等可正确判内容）；`setChannels` / `refreshStatus` 由 `notifyDataSetChanged` 改为 `notifyItemRangeChanged(0, size)`——**保留 ViewHolder 实例**，已聚焦行不被 detach，焦点不丢。
 
-### 修复（commit 165bcf2，构建为 b21）
-1. `submitList` 改用 `DiffUtil.calculateDiff` 增量更新（源为 `data class`，结构性相等，可正确判内容变化）。
-2. `setChannels` / `refreshStatus` 改 `notifyItemRangeChanged(0, size)`：**保留 ViewHolder 实例**，只重绑变化项的视图内容，已聚焦行不被 detach，焦点自然保住。
-3. 首行聚焦保留 `doOnLayout`（b20 已验证能可靠拿到首行 ViewHolder；比 `post{}` 在布局前执行拿到 null 更可靠）。**弃用** `addOnLayoutChangeListener` 重试方案——它有"RecyclerView 边界不变则不会二次触发"的卡死风险（填子项不改变自身边界）。
+### 关键测试陷阱（本次踩坑教训）
+- **`KeyEvent.KEYCODE_M = 41`，不是 46**。`adb shell input keyevent 46` 注入的是 **KEYCODE_R**，不会打开源管理页。
+- 此前用 46 连续多轮验证「焦点仍是 slot_0」的结论**全部无效**——源管理页根本没打开，`slot_0` 只是四分格默认焦点。改正为 41 后立即复现正确行为。凡 Android keycode 测试，务必先 `logcat | grep injectKeyEvent` 核对注入的 keyCode 名称，不要凭数字记忆。
 
-### 验证路径（待 b21 装机）
-- 源管理页首行获焦（uiautomator dump 焦点应在列表首行，非 slot_0）；
-- M 键弹出操作菜单对话框；D-pad DOWN 行间导航、CENTER 开编辑向导；
-- Esc 返回四分格不冻结回归。
+### 验证结果（b23，emulator-5556，uiautomator dump 实证）
+| 项 | 结果 |
+|---|---|
+| 首行获焦 | ✅ 焦点为行容器 LinearLayout `[36,107][1244,191]`（此前是 slot_0 `[3,3][637,357]`）|
+| M 键上下文菜单 | ✅ 弹出「测试播放 / 编辑 / 删除 / 绑定到格位」|
+| D-pad DOWN | ✅ 焦点下移到第二行 `[36,191][1244,275]`|
+| CENTER 确认键 | ✅ 打开「编辑视频源」向导，地址预填 `http://204.12.221.218:8181/3m1080p/cctv1.m3u8`|
+| 返回回归 | ✅ Esc 返回四分格不冻结（b14 起持续验证）|
