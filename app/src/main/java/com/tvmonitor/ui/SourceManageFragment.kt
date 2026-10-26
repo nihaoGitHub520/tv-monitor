@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -73,6 +74,14 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
     /** 四分格实时状态快照（源列表状态点反映真实播放态，US-08）。 */
     private var slotStates: List<SlotUiState> = emptyList()
 
+    /**
+     * 首行自动聚焦待办（2026-10-26）。
+     * true = 本次视图生命周期内还没聚焦过首行；布局完成后聚焦一次即置 false，
+     * 之后不再抢焦点（用户主动移焦点到别处时不受干扰）。onDestroyView 重置，
+     * 保证每次进入源管理页（含从向导返回）都重新聚焦首行。
+     */
+    private var firstRowFocusPending = true
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -104,14 +113,15 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             adapter.submitList(sources)
             binding.tvEmpty.isVisible = sources.isEmpty()
             binding.rvSources.isVisible = sources.isNotEmpty()
-            // 2026-10-26：列表非空且无行持焦点时，聚焦首行。
+            // 2026-10-26：进入页面且列表非空时，聚焦首行（一次性，见 firstRowFocusPending）。
             // 原来焦点停在"添加源"按钮上，rvSources.focusedChild 恒为 null，导致：
             // 菜单键上下文菜单（测试播放/编辑/删除/绑定）无效；D-pad 焦点易穿透到
             // 四分格；确认键编辑入口只剩鼠标点击一条路。聚焦首行后三条路都通。
-            if (sources.isNotEmpty() && binding.rvSources.focusedChild == null) {
-                binding.rvSources.post {
-                    binding.rvSources.findViewHolderForAdapterPosition(0)
-                        ?.itemView?.requestFocus()
+            if (sources.isNotEmpty() && firstRowFocusPending) {
+                binding.rvSources.doOnLayout { rv ->
+                    if (!firstRowFocusPending) return@doOnLayout
+                    rv.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                    firstRowFocusPending = false
                 }
             }
         }
@@ -150,6 +160,8 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
     }
 
     override fun onDestroyView() {
+        // 重置首行聚焦待办：下次进入本页（视图重建）重新聚焦首行
+        firstRowFocusPending = true
         _binding = null
         super.onDestroyView()
     }
