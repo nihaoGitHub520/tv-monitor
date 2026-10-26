@@ -118,7 +118,12 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             // 菜单键上下文菜单（测试播放/编辑/删除/绑定）无效；D-pad 焦点易穿透到
             // 四分格；确认键编辑入口只剩鼠标点击一条路。聚焦首行后三条路都通。
             if (sources.isNotEmpty() && firstRowFocusPending) {
-                binding.rvSources.doOnLayout { rv ->
+                // 注意：View.doOnLayout 的 lambda 参数是 View 而非 RecyclerView，
+                // 不能写 { rv -> rv.findViewHolderForAdapterPosition(0) }（编译报
+                // Unresolved reference，CI run #16/#17/#18 三连败的真凶）。
+                // 先取局部强类型引用再闭包捕获。
+                val rv = binding.rvSources
+                rv.doOnLayout {
                     val holder = rv.findViewHolderForAdapterPosition(0)
                     if (holder != null && firstRowFocusPending) {
                         holder.itemView.requestFocus()
