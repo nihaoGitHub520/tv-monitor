@@ -20,6 +20,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -118,10 +119,14 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             // 菜单键上下文菜单（测试播放/编辑/删除/绑定）无效；D-pad 焦点易穿透到
             // 四分格；确认键编辑入口只剩鼠标点击一条路。聚焦首行后三条路都通。
             if (sources.isNotEmpty() && firstRowFocusPending) {
-                // 注意：View.doOnLayout 的 lambda 参数是 View 而非 RecyclerView，
-                // 不能写 { rv -> rv.findViewHolderForAdapterPosition(0) }（编译报
-                // Unresolved reference，CI run #16/#17/#18 三连败的真凶）。
-                // 先取局部强类型引用再闭包捕获。
+                // b20→b21 修复要点：
+                // 1. 首行聚焦用 doOnLayout——首次进入页面时 rv 尚未布局，doOnLayout 在“首次
+                //    布局完成后”回调，此时首行 ViewHolder 已就绪（b20 实测 doOnLayout 能可靠
+                //    把焦点设到 row0；更早的 post{} 写法在布局前执行会拿到 null）。
+                // 2. 真正的焦点丢失根因：随后 setChannels/refreshStatus 的 notifyDataSetChanged
+                //    把聚焦行 detach 重建，焦点回落到底层四分格 slot_0（uiautomator dump 实证）。
+                //    已把两处刷新改为 notifyItemRangeChanged（保留 ViewHolder 实例，焦点不丢），
+                //    配合此处一次性聚焦，菜单键/D-pad/确认键三条交互路径才真正通畅。
                 val rv = binding.rvSources
                 rv.doOnLayout {
                     val holder = rv.findViewHolderForAdapterPosition(0)
@@ -308,23 +313,30 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
 
         fun submitList(list: List<VideoSource>) {
             if (list == items) return
+            // DiffUtil 增量更新：notifyDataSetChanged 会把已聚焦的行 detach 再重建，
+            // 焦点丢失回落到底层四分格（b20 实测：首行聚焦、D-pad 导航全被打断）。
+            // 增量更新只重绑变化项，未变化的行视图实例保留，焦点自然保住。
+            val diff = DiffUtil.calculateDiff(SourceDiffCallback(items, list))
             items = list
-            notifyDataSetChanged()
+            diff.dispatchUpdatesTo(this)
         }
 
         /** 通道号映射变化时整体重绑（绑定/解绑操作触发，频率低）。 */
         fun setChannels(map: Map<String, Int>) {
             if (map == channels) return
             channels = map
-            notifyDataSetChanged()
+            // 同上：整表重绑而非 notifyDataSetChanged，保住焦点行
+            if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
         }
 
         /**
-         * 状态点刷新（播放状态变化；列表量小，整体重绑可接受）。
+         * 状态点刷新（播放状态变化；列表量小，整表重绑可接受）。
          *
          * 2026-10-26：仅在状态真的变化时刷新——原来每 500ms 无条件 notifyDataSetChanged，
          * 刷新窗口内 bindingAdapterPosition 为 NO_POSITION，落在窗口里的点击会静默丢失，
          * 是“点很多下才进编辑”的诱因之一。
+         * 2026-10-26 晚：notifyDataSetChanged → notifyItemRangeChanged，
+         * 否则会把聚焦行 detach 导致焦点回落到四分格（见 submitList 注释）。
          */
         fun refreshStatus() {
             val current = items.associate { source ->
@@ -332,7 +344,7 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             }
             if (current != lastStatuses) {
                 lastStatuses = current
-                notifyDataSetChanged()
+                if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
             }
         }
 
@@ -391,6 +403,20 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
                 )
             }
         }
+    }
+
+    /** 源列表 DiffUtil 比较（按 id 识别、按全字段判内容）。 */
+    private class SourceDiffCallback(
+        private val oldList: List<VideoSource>,
+        private val newList: List<VideoSource>,
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize(): Int = oldList.size
+        override fun getNewListSize(): Int = newList.size
+        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+            oldList[oldItemPosition].id == newList[newItemPosition].id
+
+        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
+            oldList[oldItemPosition] == newList[newItemPosition]
     }
 
     companion object {
