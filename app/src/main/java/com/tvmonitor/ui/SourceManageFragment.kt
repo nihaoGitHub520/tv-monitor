@@ -104,6 +104,16 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             adapter.submitList(sources)
             binding.tvEmpty.isVisible = sources.isEmpty()
             binding.rvSources.isVisible = sources.isNotEmpty()
+            // 2026-10-26：列表非空且无行持焦点时，聚焦首行。
+            // 原来焦点停在"添加源"按钮上，rvSources.focusedChild 恒为 null，导致：
+            // 菜单键上下文菜单（测试播放/编辑/删除/绑定）无效；D-pad 焦点易穿透到
+            // 四分格；确认键编辑入口只剩鼠标点击一条路。聚焦首行后三条路都通。
+            if (sources.isNotEmpty() && binding.rvSources.focusedChild == null) {
+                binding.rvSources.post {
+                    binding.rvSources.findViewHolderForAdapterPosition(0)
+                        ?.itemView?.requestFocus()
+                }
+            }
         }
         observeSlotStates()
         observeChannelBindings()
