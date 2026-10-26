@@ -416,3 +416,20 @@ media3 维护者在 #1433 的官方建议原话："You can use two different sur
 - 单预览：加载期纯黑无透出（原透出四分格），起流后全屏；
 - 回归：Esc 返回后各格持续播放（4s 间隔双帧对比），日志 `退出单预览，恢复四分格（slot=0 全程未触碰）`；
 - 待验证（b16）：源管理首行聚焦 + 菜单键上下文菜单 + D-pad 行导航。
+
+### 附：CI run #16/#17/#18 三连败的真实根因（2026-10-26 下午，用 token 下载 job 日志后定位）
+
+- **现象**：三个 run 均夭折在 step 6"运行单元测试（84 项门禁）"（105s vs 成功 run 的 5:11），其中 #17 是纯文档提交（docs/QA-REPORT.md）同样失败。
+- **误判过程**：因 docs-only 提交也失败 + `return@doOnLayout` 经查为合法 Kotlin，一度推断为 runner 环境/依赖下载故障（Maven Central、Google Maven 本地探测均可达；GitHub 状态页无事件）。
+- **真相**（下载 run #18 job 日志 zip，step 6 尾部）：
+  ```
+  > Task :app:compileDebugKotlin FAILED
+  e: SourceManageFragment.kt:122:37 Unresolved reference 'findViewHolderForAdapterPosition'.
+  e: SourceManageFragment.kt:124:32 Unresolved reference 'itemView'.
+  ```
+  即**编译失败**而非测试失败：`androidx.core.view.doOnLayout` 的 lambda 参数类型是 `View` 而非 `RecyclerView`，`rv.findViewHolderForAdapterPosition(0)` / `holder.itemView` 无法解析。docs-only 提交失败是因为它**继承了 #16 的坏代码**，不能作为"环境问题"的证据。
+- **修复**（commit 5ecf4dc）：先取局部强类型引用 `val rv = binding.rvSources` 再闭包捕获；`rv.doOnLayout { val holder = rv.findViewHolderForAdapterPosition(0) ... }`。
+- **教训**：
+  1. 本机无 Android SDK，Kotlin 编译从未本地验证过——凡涉及 API 类型推断的改动（尤其扩展函数 lambda 参数类型），CI 前应先用 kotlinc + stub 或至少人工核对接收者类型；
+  2. "docs-only 提交也失败 ⇒ 环境问题"的推断只有在 docs 提交**不包含坏代码**时才成立，应先 git log 确认代码基线；
+  3. step 时长异常（105s vs 5:11）本身就是信号：失败发生在编译期而非测试期，被步骤名"运行单元测试"掩盖。
