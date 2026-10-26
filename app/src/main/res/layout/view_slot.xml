@@ -2,9 +2,12 @@
 <!--
   单格 SlotView 布局（四分格每格）：
   - PlayerView 占满，letterbox 保持宽高比（app:resize_mode="fit"）；
-  - 顶部角标：状态点 + 源名；
+  - 顶部角标：状态点 + 静音图标（2026-10-26 用户需求：源名标题不再显示）；
   - 底部浮层：重连倒计时 / 错误 + 手动重试；
   - 焦点描边：3dp 主题色（slot_focus_border），焦点变化时代码切换可见性。
+
+  注意：根视图不设 focusableInTouchMode——否则触摸/鼠标第一次点击只抢焦点
+  不触发点击（AOSP focusTaken 逻辑），点击进单预览会“失灵一次”。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -14,8 +17,7 @@
     android:background="@drawable/bg_slot"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:focusable="true">
 
     <androidx.media3.ui.PlayerView
         android:id="@+id/player_view"
@@ -44,7 +46,7 @@
         android:background="@drawable/slot_focus_border"
         android:visibility="gone" />
 
-    <!-- 顶部角标：状态点 + 源名 -->
+    <!-- 顶部角标：状态点 + 静音图标（源名标题已按 2026-10-26 用户需求移除） -->
     <LinearLayout
         android:id="@+id/slot_badge"
         android:layout_width="wrap_content"
@@ -65,16 +67,6 @@
             android:layout_height="10dp"
             android:contentDescription="@string/cd_status_dot"
             android:src="@drawable/status_dot" />
-
-        <TextView
-            android:id="@+id/slot_source_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
 
         <!-- 静音指示（US-09：默认四路静音，仅当前路可取消） -->
         <ImageView

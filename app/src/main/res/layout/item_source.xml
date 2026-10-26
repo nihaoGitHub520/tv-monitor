@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 源列表行：类型图标 + 名称/地址 + 类型标签 + 状态点 -->
+<!--
+  源列表行：类型图标 + 通道号 + 名称/地址 + 类型标签 + 状态点
+
+  注意（2026-10-26 修复“点很多下才进编辑”）：
+  行根不要设 focusableInTouchMode！AOSP View.onTouchEvent 的 ACTION_UP 逻辑：
+    focusTaken = isFocusable() && isFocusableInTouchMode() && !isFocused()
+    if (!focusTaken) performClick();
+  focusableInTouchMode=true 时，未聚焦行的第一次点击只抢焦点、不触发点击，
+  表现为“每行都要点两次才进编辑”。focusable=true 保留（D-pad/遥控焦点可用）。
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?android:attr/selectableItemBackground"
     android:focusable="true"
-    android:focusableInTouchMode="true"
     android:gravity="center_vertical"
     android:minHeight="56dp"
     android:orientation="horizontal"
@@ -20,6 +28,21 @@
         android:layout_height="24dp"
         android:layout_marginEnd="12dp"
         android:contentDescription="@string/column_type" />
+
+    <!-- 通道号（绑定的格位 1~4；未绑定显示“未绑定”） -->
+    <TextView
+        android:id="@+id/tv_channel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/badge_background"
+        android:paddingStart="8dp"
+        android:paddingTop="3dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="3dp"
+        android:textColor="@color/focus"
+        android:textSize="13sp"
+        android:textStyle="bold" />
 
     <LinearLayout
         android:layout_width="0dp"

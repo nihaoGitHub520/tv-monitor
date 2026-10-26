@@ -10,8 +10,10 @@
     <string name="app_name">TV 监控四分格</string>
 
     <!-- ==================== 主界面 / 四分格 ==================== -->
-    <!-- 底部常显提示条：第一行遥控器操作，第二行键盘/鼠标操作（2026-10-25 用户需求：简短） -->
-    <string name="main_hint_bar">遥控：确认=单预览  菜单=源管理  返回=退出\n键盘：1-4=单预览  Esc=返回  空格=播放/暂停  M=源管理  S=设置</string>
+    <!--
+      2026-10-26 用户需求：四分格底部常显提示条取消（底部不留黑），
+      操作提示改放于退出确认对话框（见 exit_confirm_hints）。
+    -->
     <string name="slot_unconfigured">未配置</string>
 
     <!-- 播放状态（角标） -->
@@ -34,9 +36,11 @@
     <string name="error_unsupported_protocol">暂不支持该协议（rtmp / http-flv）</string>
     <string name="error_source_not_found">视频源不存在</string>
 
-    <!-- 退出确认 -->
+    <!-- 退出确认（2026-10-26：操作提示并入退出对话框，替代原底部常显提示条） -->
     <string name="exit_confirm_title">退出确认</string>
     <string name="exit_confirm_message">确定要退出吗？四路播放将全部停止。</string>
+    <string name="exit_confirm_hints">操作方式：\n遥控：确认=单预览  菜单=源管理  设置=系统设置  返回=退出\n键盘：1-4=单预览  Esc=返回  空格=播放/暂停  M=源管理  S=设置</string>
+    <string name="exit_confirm_message_format">%1$s\n\n%2$s</string>
     <string name="action_exit">退出</string>
     <string name="action_cancel">取消</string>
     <string name="action_confirm">确定</string>
@@ -75,6 +79,10 @@
     <string name="action_bind_slot">绑定到格位</string>
     <string name="action_test_play">测试播放</string>
     <string name="source_list_empty">暂无视频源，请选择“添加源”</string>
+    <!-- 通道号（2026-10-26 用户需求：源列表显示通道号 = 绑定的格位 1~4） -->
+    <string name="column_channel">通道</string>
+    <string name="channel_format">通道%1$d</string>
+    <string name="channel_unbound">未绑定</string>
     <string name="column_name">名称</string>
     <string name="column_type">类型</string>
     <string name="column_address">地址</string>

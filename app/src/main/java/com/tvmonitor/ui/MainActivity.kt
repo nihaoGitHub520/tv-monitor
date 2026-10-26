@@ -372,10 +372,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 退出确认对话框（2026-10-26 用户需求：操作提示并入本对话框，
+     * 四分格底部常显提示条已取消）。
+     */
     private fun showExitConfirmDialog() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.exit_confirm_title)
-            .setMessage(R.string.exit_confirm_message)
+            .setMessage(
+                getString(
+                    R.string.exit_confirm_message_format,
+                    getString(R.string.exit_confirm_message),
+                    getString(R.string.exit_confirm_hints),
+                ),
+            )
             .setNegativeButton(R.string.action_cancel, null)
             .setPositiveButton(R.string.action_exit) { _, _ -> finish() }
             .show()

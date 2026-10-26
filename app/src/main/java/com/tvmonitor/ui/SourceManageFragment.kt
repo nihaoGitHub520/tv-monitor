@@ -53,9 +53,14 @@ interface MenuKeyHandler {
 /**
  * 源管理 Fragment（T5 / US-08 / FR-P0-04）。
  *
- * 功能：源列表（名称/类型/地址/状态）、添加、编辑、删除、绑定格位、测试播放。
+ * 功能：源列表（通道号/名称/类型/地址/状态）、添加、编辑、删除、绑定格位、测试播放。
  * 交互：上下键移动焦点行；确认键/点击 = 进入编辑（2026-10-25 用户需求：
  * 已添加的源再次点击即进入编辑修改）；菜单键 = 操作菜单（测试播放/编辑/删除/绑定）。
+ *
+ * 2026-10-26 修复“点很多下才进编辑”三重诱因：
+ * 1. 行布局移除 focusableInTouchMode（AOSP focusTaken 逻辑：未聚焦行首次点击只抢焦点）；
+ * 2. 点击用 bind 时固化的源引用，不再依赖 bindingAdapterPosition（刷新窗口内为 NO_POSITION）；
+ * 3. 状态点仅在变化时刷新，消除 500ms 无条件 notifyDataSetChanged 的点击丢失窗口。
  */
 class SourceManageFragment : Fragment(), MenuKeyHandler {
 
@@ -101,6 +106,20 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             binding.rvSources.isVisible = sources.isNotEmpty()
         }
         observeSlotStates()
+        observeChannelBindings()
+    }
+
+    /**
+     * 订阅格位绑定流（2026-10-26 用户需求：源列表显示通道号）。
+     * 通道号 = 绑定的格位（1~4）；未绑定显示“未绑定”。
+     */
+    private fun observeChannelBindings() {
+        viewModel.layoutState.observe(viewLifecycleOwner) { state ->
+            val map = state.slots.mapNotNull { slot ->
+                slot.sourceId?.let { it to slot.slotIndex + 1 }
+            }.toMap()
+            adapter.setChannels(map)
+        }
     }
 
     /**
@@ -252,14 +271,40 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
 
         private var items: List<VideoSource> = emptyList()
 
+        /** sourceId → 通道号（1-based；未绑定的源不在 map 中）。 */
+        private var channels: Map<String, Int> = emptyMap()
+
+        /** 上次状态快照（sourceId → 播放状态）：无变化不重绑，避免 500ms 全量刷新。 */
+        private var lastStatuses: Map<String, PlaybackStatus?> = emptyMap()
+
         fun submitList(list: List<VideoSource>) {
+            if (list == items) return
             items = list
             notifyDataSetChanged()
         }
 
-        /** 状态点刷新（播放状态变化；列表量小，整体重绑可接受）。 */
-        fun refreshStatus() {
+        /** 通道号映射变化时整体重绑（绑定/解绑操作触发，频率低）。 */
+        fun setChannels(map: Map<String, Int>) {
+            if (map == channels) return
+            channels = map
             notifyDataSetChanged()
+        }
+
+        /**
+         * 状态点刷新（播放状态变化；列表量小，整体重绑可接受）。
+         *
+         * 2026-10-26：仅在状态真的变化时刷新——原来每 500ms 无条件 notifyDataSetChanged，
+         * 刷新窗口内 bindingAdapterPosition 为 NO_POSITION，落在窗口里的点击会静默丢失，
+         * 是“点很多下才进编辑”的诱因之一。
+         */
+        fun refreshStatus() {
+            val current = items.associate { source ->
+                source.id to slotStates.firstOrNull { it.source?.id == source.id }?.status
+            }
+            if (current != lastStatuses) {
+                lastStatuses = current
+                notifyDataSetChanged()
+            }
         }
 
         val currentList: List<VideoSource> get() = items
@@ -283,18 +328,35 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             private val itemBinding: com.tvmonitor.databinding.ItemSourceBinding,
         ) : RecyclerView.ViewHolder(itemBinding.root) {
 
+            /**
+             * bind 时固化的源引用。
+             *
+             * 2026-10-26：点击不再用 bindingAdapterPosition 现查——适配器刷新窗口内
+             * 该位置为 NO_POSITION，getOrNull(-1) 静默丢失点击。固化引用后点击
+             * 与刷新时序完全解耦，一次点击必进编辑。
+             */
+            private var boundSource: VideoSource? = null
+
             init {
                 // 确认键 / 鼠标点击 = 进入编辑（2026-10-25 用户需求）
                 itemBinding.root.setOnClickListener {
-                    items.getOrNull(bindingAdapterPosition)?.let { openWizard(it.id) }
+                    boundSource?.let { openWizard(it.id) }
                 }
             }
 
             fun bind(source: VideoSource) {
+                boundSource = source
                 itemBinding.tvName.text = source.name
                 itemBinding.tvAddress.text = source.address
                 itemBinding.tvType.text = typeLabel(source.type)
                 itemBinding.ivTypeIcon.setImageResource(typeIcon(source.type))
+                // 通道号（2026-10-26 用户需求）
+                val channel = channels[source.id]
+                itemBinding.tvChannel.text = if (channel != null) {
+                    itemBinding.root.context.getString(R.string.channel_format, channel)
+                } else {
+                    itemBinding.root.context.getString(R.string.channel_unbound)
+                }
                 itemBinding.ivStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(
                     statusColorFor(source),
                 )
@@ -323,6 +385,11 @@ class SourceManageViewModel(
     /** 源列表（存储层 Flow 驱动）。 */
     val sources: LiveData<List<VideoSource>> = liveData {
         sourceStore.sources.collect { emit(it) }
+    }
+
+    /** 格位绑定状态流（源列表通道号：绑定的格位 1~4，2026-10-26 用户需求）。 */
+    val layoutState: LiveData<QuadLayoutState> = liveData {
+        sourceStore.layoutState.collect { emit(it) }
     }
 
     fun delete(sourceId: String) {

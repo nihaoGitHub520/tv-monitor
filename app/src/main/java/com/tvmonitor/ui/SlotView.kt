@@ -18,7 +18,8 @@ import com.tvmonitor.databinding.ViewSlotBinding
  * 职责：
  * 1. 承载 PlayerView（由 [com.tvmonitor.playback.QuadPlaybackManager] 挂载/摘除 player，
  *    本类不直接持有播放器，避免视图与播放生命周期耦合）；
- * 2. 渲染 [SlotUiState]：源名角标、状态点、重连倒计时、错误浮层 + 手动重试；
+ * 2. 渲染 [SlotUiState]：状态点、重连倒计时、错误浮层 + 手动重试
+ *    （2026-10-26 用户需求：四分格不再显示源名标题）；
  * 3. 焦点描边：获得 D-pad 焦点时显示 3dp 主题色边框。
  *
  * 线程：公开方法主线程调用。
@@ -62,8 +63,6 @@ class SlotView @JvmOverloads constructor(
 
     /** 渲染状态。 */
     fun render(state: SlotUiState) {
-        binding.slotSourceName.text =
-            state.source?.name ?: context.getString(R.string.slot_unconfigured)
         binding.slotPlaceholder.isVisible = state.source == null
         binding.slotBadge.isVisible = state.source != null
 

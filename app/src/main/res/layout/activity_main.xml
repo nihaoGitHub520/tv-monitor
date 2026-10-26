@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   主界面（单 Activity 根布局）：
-  - 四分格 2x2（QuadGridView）+ 底部提示条；
+  - 四分格 2x2（QuadGridView）铺满全屏（2026-10-26 用户需求：底部常显提示条已取消，
+    底部不再留黑条；操作提示改放于退出确认对话框）；
   - 单预览 Overlay（SinglePreviewOverlay 管理的视图组，默认隐藏）；
   - Fragment 容器（源管理 / 添加向导 / 设置，叠加在四分格之上，播放不中断）。
 -->
@@ -17,26 +18,10 @@
         android:id="@+id/quad_grid"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@id/hint_bar"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- 底部提示条（常显） -->
-    <TextView
-        android:id="@+id/hint_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/overlay_scrim"
-        android:gravity="center"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:text="@string/main_hint_bar"
-        android:textColor="@color/text_secondary"
-        android:textSize="14sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Fragment 容器（源管理 / 添加向导 / 设置） -->
     <FrameLayout
@@ -53,10 +38,16 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- ==================== 单预览 Overlay ==================== -->
+    <!--
+      根背景必须不透明黑（2026-10-26 用户需求）：单预览 resize_mode=fit 时视频宽高比
+      与屏幕不一致会产生黑边，TextureView 黑边区域透明，会透出底层四分格画面；
+      PlayerView 自身背景同样设为黑色双保险。
+    -->
     <FrameLayout
         android:id="@+id/single_preview_root"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:background="@color/black"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -70,11 +61,13 @@
           SurfaceView 图层的呈现带崩（返回后该格冻结 + 非预览格串显被预览流内容，
           QA 三次独立复现，见 QA-REPORT §12）。TextureView 在 app 窗口内合成，
           不产生独立图层，预览 surface 的建立/销毁完全不碰图层栈。
+          背景（2026-10-26）：不透明黑，遮住 fit 黑边区，防止透出四分格。
         -->
         <androidx.media3.ui.PlayerView
             android:id="@+id/single_preview_player"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:background="@color/black"
             app:keep_content_on_player_reset="false"
             app:resize_mode="fit"
             app:shutter_background_color="@color/black"
