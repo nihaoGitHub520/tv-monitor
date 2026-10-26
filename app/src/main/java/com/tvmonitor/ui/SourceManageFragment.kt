@@ -119,9 +119,11 @@ class SourceManageFragment : Fragment(), MenuKeyHandler {
             // 四分格；确认键编辑入口只剩鼠标点击一条路。聚焦首行后三条路都通。
             if (sources.isNotEmpty() && firstRowFocusPending) {
                 binding.rvSources.doOnLayout { rv ->
-                    if (!firstRowFocusPending) return@doOnLayout
-                    rv.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
-                    firstRowFocusPending = false
+                    val holder = rv.findViewHolderForAdapterPosition(0)
+                    if (holder != null && firstRowFocusPending) {
+                        holder.itemView.requestFocus()
+                        firstRowFocusPending = false
+                    }
                 }
             }
         }
