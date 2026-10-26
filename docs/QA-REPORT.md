@@ -433,3 +433,24 @@ media3 维护者在 #1433 的官方建议原话："You can use two different sur
   1. 本机无 Android SDK，Kotlin 编译从未本地验证过——凡涉及 API 类型推断的改动（尤其扩展函数 lambda 参数类型），CI 前应先用 kotlinc + stub 或至少人工核对接收者类型；
   2. "docs-only 提交也失败 ⇒ 环境问题"的推断只有在 docs 提交**不包含坏代码**时才成立，应先 git log 确认代码基线；
   3. step 时长异常（105s vs 5:11）本身就是信号：失败发生在编译期而非测试期，被步骤名"运行单元测试"掩盖。
+
+## 14. b20→b21：源管理首行聚焦被刷新打断（焦点保焦修复）
+
+### 现象（b20 实测，uiautomator dump 实证）
+- 进入源管理页，首行聚焦"看似成功"（焦点先到 row0），但 immediately 后焦点回落到底层四分格 `slot_0`。
+- 后果：菜单键上下文菜单（测试播放/编辑/删除/绑定）无效（依赖 `rvSources.focusedChild`）；D-pad 导航穿透到四分格；确认键编辑入口只剩鼠标点击。三条交互路径全部失效。
+
+### 根因（比"点很多下"更深一层）
+- `setChannels()`（绑定/解绑触发）与 `refreshStatus()`（每 500ms 状态轮询触发）原本调用 `notifyDataSetChanged()`。
+- `notifyDataSetChanged` 会**把已聚焦的行 detach 再重建 ViewHolder**，焦点随之丢失，回落到布局中下一个可聚焦视图（四分格 slot_0，因为它在 Fragment 下层）。
+- b14/b15 的"点很多下"是 focusTaken（点击只抢焦点）；b20 是刷新打断焦点——两者都指向"源管理页焦点不稳定"，但机制不同。
+
+### 修复（commit 165bcf2，构建为 b21）
+1. `submitList` 改用 `DiffUtil.calculateDiff` 增量更新（源为 `data class`，结构性相等，可正确判内容变化）。
+2. `setChannels` / `refreshStatus` 改 `notifyItemRangeChanged(0, size)`：**保留 ViewHolder 实例**，只重绑变化项的视图内容，已聚焦行不被 detach，焦点自然保住。
+3. 首行聚焦保留 `doOnLayout`（b20 已验证能可靠拿到首行 ViewHolder；比 `post{}` 在布局前执行拿到 null 更可靠）。**弃用** `addOnLayoutChangeListener` 重试方案——它有"RecyclerView 边界不变则不会二次触发"的卡死风险（填子项不改变自身边界）。
+
+### 验证路径（待 b21 装机）
+- 源管理页首行获焦（uiautomator dump 焦点应在列表首行，非 slot_0）；
+- M 键弹出操作菜单对话框；D-pad DOWN 行间导航、CENTER 开编辑向导；
+- Esc 返回四分格不冻结回归。
